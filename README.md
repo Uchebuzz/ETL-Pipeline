@@ -5,7 +5,7 @@ A comprehensive ETL (Extract, Transform, Load) pipeline for processing financial
 ## Features
 
 - **Data Ingestion**: Supports CSV and JSON formats from S3 (automatically triggered on upload)
-- **Data Transformation**: Uses PySpark for scalable data processing
+- **Data Transformation**: Uses pandas for efficient data processing
 - **Data Storage**: Outputs data in Parquet format to S3
 - **Infrastructure as Code**: Terraform configuration for AWS resources
 - **CI/CD**: GitHub Actions workflow for automated testing and deployment
@@ -27,7 +27,7 @@ A comprehensive ETL (Extract, Transform, Load) pipeline for processing financial
        │
        ▼
 ┌─────────────┐
-│   Extract   │ (PySpark from S3)
+│   Extract   │ (pandas from S3)
 └──────┬──────┘
        │
        ▼
@@ -44,7 +44,6 @@ A comprehensive ETL (Extract, Transform, Load) pipeline for processing financial
 ## Prerequisites
 
 - Python 3.9+
-- Java 11+ (required for PySpark)
 - AWS CLI configured with credentials
 - Terraform 1.0+ (for infrastructure deployment)
 - Docker (optional, for containerized execution)
@@ -312,9 +311,10 @@ s3://bucket/processed_data/date=20240115_120000/
    - Check bucket policies
    - Ensure bucket exists
 
-4. **Spark out of memory**
-   - Increase driver/executor memory in Spark config
-   - Reduce data size or partition data
+4. **Memory issues with large datasets**
+   - Process data in chunks using pandas chunking
+   - Consider using AWS Glue or EMR for very large datasets
+   - Increase Lambda memory allocation if using Lambda
 
 ## Testing
 

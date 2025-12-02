@@ -5,7 +5,7 @@ This guide will help you set up and run the ETL pipeline step by step.
 ## Prerequisites Checklist
 
 - [ ] Python 3.9+ installed
-- [ ] Java 11+ installed (required for PySpark)
+- [ ] Python 3.9+ installed
 - [ ] AWS CLI configured
 - [ ] AWS credentials with S3 access
 - [ ] Terraform 1.0+ (for infrastructure)
@@ -184,16 +184,16 @@ docker-compose up --build
 
 ## Troubleshooting
 
-### Java Not Found
+### Python Not Found
 ```bash
 # Ubuntu/Debian
-sudo apt-get install openjdk-11-jdk
+sudo apt-get install python3 python3-pip
 
 # macOS
-brew install openjdk@11
+brew install python3
 
-# Set JAVA_HOME
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+# Windows
+# Download from python.org
 ```
 
 ### AWS Credentials Error
@@ -201,10 +201,10 @@ export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 - Check IAM permissions
 - Verify bucket exists and is accessible
 
-### Spark Memory Issues
-- Reduce data size
-- Increase driver memory in Spark config
-- Use smaller partitions
+### Memory Issues with Large Datasets
+- Process data in chunks using pandas
+- Consider using AWS Glue or EMR for very large datasets
+- Increase Lambda memory if using Lambda
 
 ### Terraform Errors
 - Run `terraform init` first

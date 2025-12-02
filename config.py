@@ -22,11 +22,6 @@ class Config:
     SOURCE_TYPE = os.getenv('SOURCE_TYPE', 'local')  # 's3' or 'local'
     OUTPUT_PREFIX = os.getenv('OUTPUT_PREFIX', 'processed_data')
     
-    # Spark Configuration
-    SPARK_MASTER = os.getenv('SPARK_MASTER', 'local[*]')
-    SPARK_DRIVER_MEMORY = os.getenv('SPARK_DRIVER_MEMORY', '2g')
-    SPARK_EXECUTOR_MEMORY = os.getenv('SPARK_EXECUTOR_MEMORY', '2g')
-    
     # Monitoring Configuration
     CLOUDWATCH_LOG_GROUP = os.getenv('CLOUDWATCH_LOG_GROUP', 'etl-pipeline')
     CLOUDWATCH_ENABLED = os.getenv('CLOUDWATCH_ENABLED', 'true').lower() == 'true'

@@ -19,13 +19,13 @@ variable "project_name" {
 variable "source_bucket_name" {
   description = "Name of the source S3 bucket"
   type        = string
-  default     = ""
+  default     = "cbac-etl-source-test"
 }
 
 variable "destination_bucket_name" {
   description = "Name of the destination S3 bucket"
   type        = string
-  default     = ""
+  default     = "cbac-etl-source-test-target"
 }
 
 variable "enable_cloudwatch" {

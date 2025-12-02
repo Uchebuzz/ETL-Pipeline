@@ -11,14 +11,7 @@ try {
     exit 1
 }
 
-# Check Java
-try {
-    $javaVersion = java -version 2>&1 | Select-Object -First 1
-    Write-Host "Java version: $javaVersion" -ForegroundColor Cyan
-} catch {
-    Write-Host "Warning: Java not found. PySpark requires Java 11+" -ForegroundColor Yellow
-    Write-Host "Download from: https://adoptium.net/" -ForegroundColor Yellow
-}
+# Java no longer required (using pandas instead of PySpark)
 
 # Create virtual environment
 if (-not (Test-Path "venv")) {

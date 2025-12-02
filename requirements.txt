@@ -1,11 +1,11 @@
 # Core ETL Pipeline Dependencies
-pyspark>=3.4.0
 boto3>=1.28.0
 botocore>=1.31.0
 
 # Data Processing
 pandas>=2.0.0
 numpy>=1.24.0
+pyarrow>=12.0.0  # For Parquet file support
 
 # Monitoring and Logging
 watchtower>=3.0.0

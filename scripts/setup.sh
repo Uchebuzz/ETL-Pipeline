@@ -9,14 +9,7 @@ echo "Setting up ETL Pipeline..."
 python_version=$(python3 --version 2>&1 | awk '{print $2}')
 echo "Python version: $python_version"
 
-# Check Java
-if ! command -v java &> /dev/null; then
-    echo "Warning: Java not found. PySpark requires Java 11+"
-    echo "Install Java: sudo apt-get install openjdk-11-jdk"
-else
-    java_version=$(java -version 2>&1 | head -n 1)
-    echo "Java version: $java_version"
-fi
+# Java no longer required (using pandas instead of PySpark)
 
 # Create virtual environment
 if [ ! -d "venv" ]; then

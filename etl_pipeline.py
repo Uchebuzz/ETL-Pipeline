@@ -6,11 +6,12 @@ Ingests data from S3/local, transforms it, and stores as Parquet in S3
 import os
 import logging
 import boto3
+import pandas as pd
+import pyarrow.parquet as pq
+import pyarrow as pa
 from datetime import datetime
 from typing import Optional
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, to_date, year, month, sum as spark_sum, avg, count
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, DateType, IntegerType
+from io import BytesIO, StringIO
 
 # Configure logging
 logging.basicConfig(
@@ -22,12 +23,19 @@ logger = logging.getLogger(__name__)
 # CloudWatch logging setup
 try:
     import watchtower
-    handler = watchtower.CloudWatchLogHandler(
-        log_group=os.getenv('CLOUDWATCH_LOG_GROUP', 'etl-pipeline'),
-        stream_name=f"etl-{datetime.now().strftime('%Y-%m-%d')}"
-    )
-    logger.addHandler(handler)
-    logger.info("CloudWatch logging enabled")
+    cloudwatch_enabled = os.getenv('CLOUDWATCH_ENABLED', 'true').lower() == 'true'
+    if cloudwatch_enabled:
+        try:
+            handler = watchtower.CloudWatchLogHandler(
+                log_group=os.getenv('CLOUDWATCH_LOG_GROUP', '/aws/lambda/etl-pipeline'),
+                stream_name=f"etl-{datetime.now().strftime('%Y-%m-%d')}"
+            )
+            logger.addHandler(handler)
+            logger.info("CloudWatch logging enabled")
+        except Exception as e:
+            logger.warning(f"CloudWatch logging setup failed: {str(e)}. Using standard logging.")
+    else:
+        logger.info("CloudWatch logging disabled")
 except ImportError:
     logger.warning("watchtower not installed, using standard logging")
 
@@ -50,97 +58,82 @@ class ETLPipeline:
         self.destination_bucket = destination_bucket
         self.source_type = source_type
         self.aws_region = aws_region
-        self.spark = None
         self.s3_client = None
         
-    def initialize_spark(self):
-        """Initialize Spark session with S3 support"""
-        logger.info("Initializing Spark session...")
-        
-        spark_builder = SparkSession.builder \
-            .appName("FinancialETLPipeline") \
-            .config("spark.sql.adaptive.enabled", "true") \
-            .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
-        
-        # Configure S3 access
-        aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
-        aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-        
-        if aws_access_key and aws_secret_key:
-            spark_builder.config("spark.hadoop.fs.s3a.access.key", aws_access_key) \
-                .config("spark.hadoop.fs.s3a.secret.key", aws_secret_key) \
-                .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-                .config("spark.hadoop.fs.s3a.aws.credentials.provider", 
-                       "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
-        
-        self.spark = spark_builder.getOrCreate()
-        logger.info("Spark session initialized successfully")
-        
-        # Initialize S3 client
+    def initialize_s3_client(self):
+        """Initialize S3 client"""
+        logger.info("Initializing S3 client...")
         self.s3_client = boto3.client('s3', region_name=self.aws_region)
+        logger.info("S3 client initialized successfully")
         
-    def extract(self) -> Optional:
+    def extract(self) -> Optional[pd.DataFrame]:
         """
         Extract data from source (S3 or local)
         
         Returns:
-            Spark DataFrame
+            Pandas DataFrame
         """
         logger.info(f"Extracting data from {self.source_path}...")
         
         try:
             if self.source_type == 's3':
+                # Parse S3 URI
+                if not self.s3_client:
+                    self.initialize_s3_client()
+                
+                # Extract bucket and key from S3 URI
+                s3_path = self.source_path.replace('s3://', '')
+                bucket, key = s3_path.split('/', 1) if '/' in s3_path else (s3_path, '')
+                
                 # Read from S3
-                df = self.spark.read \
-                    .option("header", "true") \
-                    .option("inferSchema", "true") \
-                    .csv(self.source_path)
+                logger.info(f"Reading from s3://{bucket}/{key}")
+                obj = self.s3_client.get_object(Bucket=bucket, Key=key)
+                
+                if key.endswith('.json'):
+                    df = pd.read_json(BytesIO(obj['Body'].read()))
+                else:
+                    df = pd.read_csv(BytesIO(obj['Body'].read()))
             else:
                 # Read from local filesystem
                 if self.source_path.endswith('.json'):
-                    df = self.spark.read \
-                        .option("multiline", "true") \
-                        .json(self.source_path)
+                    df = pd.read_json(self.source_path)
                 else:
-                    df = self.spark.read \
-                        .option("header", "true") \
-                        .option("inferSchema", "true") \
-                        .csv(self.source_path)
+                    df = pd.read_csv(self.source_path)
             
-            logger.info(f"Successfully extracted {df.count()} records")
+            logger.info(f"Successfully extracted {len(df)} records")
             return df
             
         except Exception as e:
             logger.error(f"Error during extraction: {str(e)}")
             raise
     
-    def transform(self, df):
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Transform the financial data
         
         Args:
-            df: Input Spark DataFrame
+            df: Input Pandas DataFrame
             
         Returns:
-            Transformed Spark DataFrame
+            Transformed Pandas DataFrame
         """
         logger.info("Starting data transformation...")
         
         try:
             # Clean and standardize column names
-            df = df.select([col(c).alias(c.lower().replace(' ', '_').replace('-', '_')) 
-                           for c in df.columns])
+            df.columns = df.columns.str.lower().str.replace(' ', '_').str.replace('-', '_')
             
             # Data cleaning and enrichment
             # Convert date columns if they exist
             date_columns = [c for c in df.columns if 'date' in c.lower()]
             for date_col in date_columns:
-                df = df.withColumn(date_col, to_date(col(date_col), "yyyy-MM-dd"))
+                df[date_col] = pd.to_datetime(df[date_col], format='%Y-%m-%d', errors='coerce')
             
             # Add processing metadata
-            df = df.withColumn("processed_date", 
-                             when(col("processed_date").isNull(), 
-                                 datetime.now().strftime("%Y-%m-%d")).otherwise(col("processed_date")))
+            if 'processed_date' not in df.columns:
+                df['processed_date'] = datetime.now().strftime("%Y-%m-%d")
+            else:
+                df['processed_date'] = df['processed_date'].fillna(datetime.now().strftime("%Y-%m-%d"))
             
             # If transaction amount exists, calculate aggregates
             amount_columns = [c for c in df.columns if 'amount' in c.lower() or 'value' in c.lower()]
@@ -148,47 +141,58 @@ class ETLPipeline:
             if amount_columns:
                 # Add year and month for partitioning
                 if date_columns:
-                    df = df.withColumn("year", year(col(date_columns[0]))) \
-                           .withColumn("month", month(col(date_columns[0])))
+                    df['year'] = pd.to_datetime(df[date_columns[0]]).dt.year
+                    df['month'] = pd.to_datetime(df[date_columns[0]]).dt.month
                 
-                # Data quality checks
-                df = df.filter(col(amount_columns[0]).isNotNull())
+                # Data quality checks - remove rows with null amounts
+                df = df[df[amount_columns[0]].notna()]
             
             # Remove duplicates
-            df = df.dropDuplicates()
+            df = df.drop_duplicates()
             
-            logger.info(f"Transformation complete. Records after transformation: {df.count()}")
+            logger.info(f"Transformation complete. Records after transformation: {len(df)}")
             return df
             
         except Exception as e:
             logger.error(f"Error during transformation: {str(e)}")
             raise
     
-    def load(self, df, output_prefix: str = "processed_data"):
+    def load(self, df: pd.DataFrame, output_prefix: str = "processed_data"):
         """
         Load transformed data to S3 as Parquet
         
         Args:
-            df: Transformed Spark DataFrame
+            df: Transformed Pandas DataFrame
             output_prefix: S3 prefix for output files
         """
         logger.info(f"Loading data to s3://{self.destination_bucket}/{output_prefix}...")
         
         try:
+            if not self.s3_client:
+                self.initialize_s3_client()
+            
             # Create S3 output path
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            s3_output_path = f"s3a://{self.destination_bucket}/{output_prefix}/date={timestamp}"
+            s3_key = f"{output_prefix}/date={timestamp}/data.parquet"
             
-            # Write as Parquet with partitioning
-            df.write \
-                .mode("overwrite") \
-                .option("compression", "snappy") \
-                .parquet(s3_output_path)
+            # Convert DataFrame to Parquet in memory
+            parquet_buffer = BytesIO()
+            table = pa.Table.from_pandas(df)
+            pq.write_table(table, parquet_buffer, compression='snappy')
+            parquet_buffer.seek(0)
             
+            # Upload to S3
+            self.s3_client.put_object(
+                Bucket=self.destination_bucket,
+                Key=s3_key,
+                Body=parquet_buffer.getvalue()
+            )
+            
+            s3_output_path = f"s3://{self.destination_bucket}/{s3_key}"
             logger.info(f"Successfully loaded data to {s3_output_path}")
             
             # Log metrics
-            record_count = df.count()
+            record_count = len(df)
             logger.info(f"Total records loaded: {record_count}")
             
             return s3_output_path
@@ -209,8 +213,8 @@ class ETLPipeline:
             logger.info("Starting ETL Pipeline Execution")
             logger.info("=" * 50)
             
-            # Initialize Spark
-            self.initialize_spark()
+            # Initialize S3 client
+            self.initialize_s3_client()
             
             # Extract
             df = self.extract()
@@ -230,10 +234,6 @@ class ETLPipeline:
         except Exception as e:
             logger.error(f"ETL Pipeline failed: {str(e)}")
             raise
-        finally:
-            if self.spark:
-                self.spark.stop()
-                logger.info("Spark session closed")
 
 
 def main():
@@ -263,4 +263,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

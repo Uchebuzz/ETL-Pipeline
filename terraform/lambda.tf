@@ -1,3 +1,73 @@
+# Lambda Layer for heavy dependencies (pandas, numpy, pyarrow)
+resource "null_resource" "package_lambda_layer" {
+  triggers = {
+    requirements = filemd5("${path.module}/../requirements.txt")
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
+    command = <<-EOT
+      $ErrorActionPreference = "Stop"
+      $projectRoot = Resolve-Path (Join-Path "${path.module}" "..")
+      Push-Location $projectRoot
+      
+      try {
+        $scriptPath = Join-Path $projectRoot "scripts\package_lambda_layer.ps1"
+        if (Test-Path $scriptPath) {
+          & $scriptPath
+        } else {
+          Write-Host "Layer packaging script not found, creating layer manually..."
+          $layerPath = Join-Path $projectRoot "lambda_layer\python"
+          if (-not (Test-Path $layerPath)) {
+            New-Item -ItemType Directory -Path $layerPath -Force | Out-Null
+          }
+          pip install pandas numpy pyarrow -t $layerPath --upgrade
+        }
+      } finally {
+        Pop-Location
+      }
+    EOT
+  }
+}
+
+# Create Lambda Layer zip
+data "archive_file" "lambda_layer_zip" {
+  depends_on = [null_resource.package_lambda_layer]
+  type        = "zip"
+  source_dir  = "${path.module}/../lambda_layer"
+  output_path = "${path.module}/lambda_layer.zip"
+  excludes = [
+    "__pycache__",
+    "*.pyc",
+    "*.pyo",
+    "*.pyi",
+    "*.dist-info",
+    "*.egg-info",
+    "tests",
+    "test",
+    "*.md",
+    "*.txt",
+    "*.rst",
+    "*.html",
+    "LICENSE*",
+    "examples",
+    "example",
+    "samples",
+    "docs",
+    "doc"
+  ]
+}
+
+# Lambda Layer resource
+resource "aws_lambda_layer_version" "etl_dependencies" {
+  layer_name          = "${var.project_name}-dependencies-${var.environment}"
+  filename            = data.archive_file.lambda_layer_zip.output_path
+  source_code_hash    = data.archive_file.lambda_layer_zip.output_base64sha256
+  compatible_runtimes = ["python3.9", "python3.10", "python3.11", "python3.12"]
+
+  description = "Heavy dependencies (pandas, numpy, pyarrow) for ETL pipeline"
+}
+
 # Lambda function for ETL pipeline triggered by S3 events
 resource "aws_lambda_function" "etl_pipeline" {
   function_name = "${var.project_name}-etl-${var.environment}"
@@ -7,17 +77,22 @@ resource "aws_lambda_function" "etl_pipeline" {
   timeout       = 900  # 15 minutes max
   memory_size   = 3008  # Maximum memory for better performance
 
-  # Package the Lambda function
+  # Package the Lambda function (code only, no heavy deps)
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+
+  # Attach Lambda Layer with heavy dependencies
+  layers = [aws_lambda_layer_version.etl_dependencies.arn]
+
+  # Ensure CloudWatch log group exists before Lambda function
+  depends_on = [aws_cloudwatch_log_group.etl_pipeline]
 
   environment {
     variables = {
       DESTINATION_BUCKET = aws_s3_bucket.destination.id
-      AWS_REGION         = var.aws_region
       OUTPUT_PREFIX      = "processed_data"
-      CLOUDWATCH_LOG_GROUP = "${var.project_name}-${var.environment}"
-      CLOUDWATCH_ENABLED   = "true"
+      CLOUDWATCH_LOG_GROUP = var.enable_cloudwatch ? aws_cloudwatch_log_group.etl_pipeline[0].name : "/aws/lambda/${var.project_name}-etl-${var.environment}"
+      CLOUDWATCH_ENABLED   = tostring(var.enable_cloudwatch)
     }
   }
 
@@ -36,16 +111,38 @@ resource "null_resource" "package_lambda" {
   }
 
   provisioner "local-exec" {
+    interpreter = ["PowerShell", "-Command"]
     command = <<-EOT
-      if [ -f "${path.module}/../scripts/package_lambda.sh" ]; then
-        bash "${path.module}/../scripts/package_lambda.sh"
-      else
-        echo "Creating lambda_package directory..."
-        mkdir -p "${path.module}/../lambda_package"
-        cp "${path.module}/../etl_pipeline.py" "${path.module}/../lambda_package/"
-        cp "${path.module}/../lambda_handler.py" "${path.module}/../lambda_package/"
-        cp "${path.module}/../config.py" "${path.module}/../lambda_package/"
-      fi
+      $ErrorActionPreference = "Stop"
+      # Change to project root directory
+      $projectRoot = Resolve-Path (Join-Path "${path.module}" "..")
+      Push-Location $projectRoot
+      
+      try {
+        $scriptPath = Join-Path $projectRoot "scripts\package_lambda.ps1"
+        if (Test-Path $scriptPath) {
+          & $scriptPath
+        } else {
+          # Fallback: Create package directory manually
+          $lambdaPackagePath = Join-Path $projectRoot "lambda_package"
+          if (-not (Test-Path $lambdaPackagePath)) {
+            New-Item -ItemType Directory -Path $lambdaPackagePath -Force | Out-Null
+          }
+          
+          $files = @("etl_pipeline.py", "lambda_handler.py", "config.py")
+          foreach ($file in $files) {
+            $sourceFile = Join-Path $projectRoot $file
+            if (Test-Path $sourceFile) {
+              Copy-Item $sourceFile -Destination $lambdaPackagePath -Force
+              Write-Host "Copied $file to lambda_package"
+            }
+          }
+          
+          Write-Host "Lambda package directory created at $lambdaPackagePath"
+        }
+      } finally {
+        Pop-Location
+      }
     EOT
   }
 }
@@ -56,7 +153,27 @@ data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/../lambda_package"
   output_path = "${path.module}/lambda_function.zip"
-  excludes    = ["__pycache__", "*.pyc", "*.pyo", "*.dist-info", "tests"]
+  excludes = [
+    "__pycache__",
+    "*.pyc",
+    "*.pyo",
+    "*.pyi",
+    "*.dist-info",
+    "*.egg-info",
+    "tests",
+    "test",
+    "*.md",
+    "*.txt",
+    "*.rst",
+    "*.html",
+    "LICENSE*",
+    "examples",
+    "example",
+    "samples",
+    "docs",
+    "doc",
+    "*.so.*"
+  ]
 }
 
 # S3 event notification to trigger Lambda

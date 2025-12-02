@@ -43,7 +43,6 @@ class TestETLPipeline:
         assert pipeline.destination_bucket == "test-bucket"
         assert pipeline.source_type == "local"
     
-    @pytest.mark.skip(reason="Requires Spark and AWS setup")
     def test_pipeline_extract(self, sample_csv):
         """Test data extraction"""
         pipeline = ETLPipeline(
@@ -51,13 +50,10 @@ class TestETLPipeline:
             destination_bucket="test-bucket",
             source_type="local"
         )
-        pipeline.initialize_spark()
         df = pipeline.extract()
         assert df is not None
-        assert df.count() > 0
-        pipeline.spark.stop()
+        assert len(df) > 0
     
-    @pytest.mark.skip(reason="Requires Spark and AWS setup")
     def test_pipeline_transform(self, sample_csv):
         """Test data transformation"""
         pipeline = ETLPipeline(
@@ -65,11 +61,10 @@ class TestETLPipeline:
             destination_bucket="test-bucket",
             source_type="local"
         )
-        pipeline.initialize_spark()
         df = pipeline.extract()
         df_transformed = pipeline.transform(df)
         assert df_transformed is not None
-        pipeline.spark.stop()
+        assert len(df_transformed) > 0
 
 
 if __name__ == "__main__":

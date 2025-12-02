@@ -16,12 +16,12 @@ terraform {
     }
   }
   
-  backend "s3" {
-    # Configure backend in backend.tf or use local backend for development
-    # bucket = "your-terraform-state-bucket"
-    # key    = "etl-pipeline/terraform.tfstate"
-    # region = "us-east-1"
-  }
+  # Uncomment to use S3 backend for remote state storage
+  # backend "s3" {
+  #   bucket = "your-terraform-state-bucket"
+  #   key    = "etl-pipeline/terraform.tfstate"
+  #   region = "us-east-1"
+  # }
 }
 
 provider "aws" {
