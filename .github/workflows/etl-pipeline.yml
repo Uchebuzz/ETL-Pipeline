@@ -164,9 +164,6 @@ jobs:
         continue-on-error: true
       
       - name: Test Lambda trigger
-        run: |
-          echo "Lambda function deployed. Upload a CSV file to the source S3 bucket to trigger the pipeline."
-        continue-on-error: true
         env:
           SOURCE_PATH: ${{ secrets.SOURCE_PATH || 'data/sample_financial_data.csv' }}
           SOURCE_TYPE: ${{ secrets.SOURCE_TYPE || 'local' }}
@@ -174,6 +171,7 @@ jobs:
           AWS_REGION: ${{ env.AWS_REGION }}
           CLOUDWATCH_LOG_GROUP: ${{ secrets.CLOUDWATCH_LOG_GROUP || 'etl-pipeline' }}
         run: |
+          echo "Lambda function deployed. Upload a CSV file to the source S3 bucket to trigger the pipeline."
           python etl_pipeline.py
 
   notify:
