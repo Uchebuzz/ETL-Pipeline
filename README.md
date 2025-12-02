@@ -130,7 +130,7 @@ docker-compose up --build
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AWS_REGION` | AWS region | `us-east-1` |
+| `AWS_REGION` | AWS region | `us-west-1` |
 | `AWS_ACCESS_KEY_ID` | AWS access key | Required |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | Required |
 | `SOURCE_PATH` | Path to source data | `data/sample_financial_data.csv` |
@@ -145,7 +145,7 @@ docker-compose up --build
 Edit `terraform/variables.tf` or use `terraform.tfvars`:
 
 ```hcl
-aws_region            = "us-east-1"
+aws_region            = "us-west-1"
 environment           = "dev"
 project_name          = "etl-pipeline"
 enable_cloudwatch     = true
