@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  etl-pipeline:
+    build: .
+    container_name: etl-pipeline
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SOURCE_PATH=${SOURCE_PATH:-data/sample_financial_data.csv}
+      - SOURCE_TYPE=${SOURCE_TYPE:-local}
+      - DESTINATION_BUCKET=${DESTINATION_BUCKET:-etl-pipeline-output}
+      - OUTPUT_PREFIX=${OUTPUT_PREFIX:-processed_data}
+      - CLOUDWATCH_LOG_GROUP=${CLOUDWATCH_LOG_GROUP:-etl-pipeline}
+      - CLOUDWATCH_ENABLED=${CLOUDWATCH_ENABLED:-true}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - etl-network
+
+networks:
+  etl-network:
+    driver: bridge
+

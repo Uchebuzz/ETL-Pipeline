@@ -1,0 +1,26 @@
+# Core ETL Pipeline Dependencies
+pyspark>=3.4.0
+boto3>=1.28.0
+botocore>=1.31.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Monitoring and Logging
+watchtower>=3.0.0
+
+# Secrets Management (optional)
+hvac>=1.1.0  # For HashiCorp Vault
+
+# Testing (optional)
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Code Quality (optional)
+flake8>=6.1.0
+black>=23.7.0
+
+# Utilities
+python-dotenv>=1.0.0
+
