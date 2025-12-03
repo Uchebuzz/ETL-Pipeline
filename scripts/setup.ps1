@@ -46,6 +46,6 @@ Write-Host "Setup complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "1. Configure AWS credentials"
-Write-Host "2. Deploy infrastructure: cd terraform; terraform init; terraform apply"
+Write-Host "2. Deploy infrastructure: cd terraform; .\terraform.ps1 init; .\terraform.ps1 apply"
 Write-Host "3. Upload a CSV file to the source S3 bucket (input/ prefix) to trigger the Glue job"
 

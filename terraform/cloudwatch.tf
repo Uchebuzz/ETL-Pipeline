@@ -15,7 +15,7 @@ resource "aws_cloudwatch_metric_alarm" "etl_pipeline_errors" {
   alarm_name          = "${var.project_name}-errors-${var.environment}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
-  metric_name         = "Errors"
+  metric_name         = "PipelineErrors"
   namespace           = "ETL/Pipeline"
   period              = 300
   statistic           = "Sum"

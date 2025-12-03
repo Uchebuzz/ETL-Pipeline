@@ -11,21 +11,20 @@ resource "aws_lambda_function" "etl_pipeline" {
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
-  # Ensure CloudWatch log group exists before Lambda function
-  depends_on = [aws_cloudwatch_log_group.etl_pipeline]
-
   environment {
     variables = {
       GLUE_JOB_NAME      = aws_glue_job.etl_job.name
       DESTINATION_BUCKET = aws_s3_bucket.destination.id
       OUTPUT_PREFIX      = "processed_data"
-      AWS_REGION         = var.aws_region
-      CLOUDWATCH_LOG_GROUP = var.enable_cloudwatch ? aws_cloudwatch_log_group.etl_pipeline[0].name : "/aws/lambda/${var.project_name}-etl-${var.environment}"
+      CLOUDWATCH_LOG_GROUP = var.enable_cloudwatch ? try(aws_cloudwatch_log_group.etl_pipeline[0].name, "/aws/lambda/${var.project_name}-etl-${var.environment}") : "/aws/lambda/${var.project_name}-etl-${var.environment}"
       CLOUDWATCH_ENABLED   = tostring(var.enable_cloudwatch)
     }
   }
 
-  depends_on = [aws_glue_job.etl_job]
+  # Ensure Glue job exists before Lambda function
+  depends_on = [
+    aws_glue_job.etl_job
+  ]
 
   tags = {
     Name = "${var.project_name}-etl-lambda"
@@ -174,6 +173,27 @@ resource "aws_iam_role_policy" "lambda_cloudwatch_policy" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:${var.aws_region}:*:*"
+      }
+    ]
+  })
+}
+
+# IAM Policy for Lambda to trigger Glue jobs
+resource "aws_iam_role_policy" "lambda_glue_policy" {
+  name = "${var.project_name}-lambda-glue-policy-${var.environment}"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:StartJobRun",
+          "glue:GetJobRun",
+          "glue:GetJobRuns"
+        ]
+        Resource = aws_glue_job.etl_job.arn
       }
     ]
   })

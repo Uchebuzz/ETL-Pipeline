@@ -13,20 +13,23 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## 2. Set AWS Credentials
+## 2. Set AWS Credentials & Deploy Infrastructure
+
+Create a `.env` file in the project root with your AWS credentials:
 
 ```bash
-export AWS_ACCESS_KEY_ID=your_key
-export AWS_SECRET_ACCESS_KEY=your_secret
+# Create .env file
+AWS_ACCESS_KEY_ID=your_key
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_REGION=us-east-1
 ```
 
-## 3. Deploy Infrastructure
+Then deploy the infrastructure:
 
-```bash
+```powershell
 cd terraform
-terraform init
-terraform plan
-terraform apply
+.\terraform.ps1 init
+.\terraform.ps1 apply
 ```
 
 This creates:
@@ -38,14 +41,16 @@ This creates:
 - IAM roles and permissions
 - CloudWatch logging
 
-## 4. Upload CSV File to Trigger Pipeline
+## 3. Upload CSV File to Trigger Pipeline
 
 ```bash
-# Get the source bucket name
+# Get the source bucket name from terraform output
+cd terraform
 SOURCE_BUCKET=$(terraform output -raw source_bucket_name)
+cd ..
 
-# Upload your CSV file to the input/ prefix
-aws s3 cp your_financial_data.csv s3://$SOURCE_BUCKET/input/your_financial_data.csv
+# Upload your CSV file using Python script
+python scripts/upload_to_s3.py --bucket $SOURCE_BUCKET --file your_financial_data.csv
 ```
 
 **That's it!** The pipeline automatically:
@@ -55,21 +60,18 @@ aws s3 cp your_financial_data.csv s3://$SOURCE_BUCKET/input/your_financial_data.
 - Transforms and cleans the data
 - Loads as Parquet to the destination bucket
 
-## Check Results
+## 4. Check Results
+
+Monitor the pipeline execution and view logs:
 
 ```bash
-# View processed data
-DEST_BUCKET=$(terraform output -raw destination_bucket_name)
-aws s3 ls s3://$DEST_BUCKET/processed_data/ --recursive
-
-# View Lambda logs
-LAMBDA_NAME=$(terraform output -raw lambda_function_name)
-aws logs tail /aws/lambda/$LAMBDA_NAME --follow
-
-# View Glue job status
-GLUE_JOB=$(terraform output -raw glue_job_name)
-aws glue get-job-runs --job-name $GLUE_JOB --max-items 1
+python scripts/monitor_pipeline.py
 ```
+
+This will show:
+- Lambda function logs
+- Glue job status and execution details
+- Processed files in the destination S3 bucket
 
 ## What's Next?
 

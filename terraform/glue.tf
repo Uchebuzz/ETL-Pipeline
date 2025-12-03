@@ -1,6 +1,6 @@
 # S3 bucket for Glue scripts
 resource "aws_s3_bucket" "glue_scripts" {
-  bucket = "${var.project_name}-glue-scripts-${var.environment}-${random_id.bucket_suffix.hex}"
+  bucket = var.glue_scripts_bucket_name != "" ? var.glue_scripts_bucket_name : "${var.project_name}-glue-scripts-${var.environment}"
 
   tags = {
     Name        = "${var.project_name}-glue-scripts"
@@ -152,27 +152,6 @@ resource "aws_glue_job" "etl_job" {
   tags = {
     Name = "${var.project_name}-glue-etl-job"
   }
-}
-
-# IAM Policy for Lambda to trigger Glue jobs
-resource "aws_iam_role_policy" "lambda_glue_policy" {
-  name = "${var.project_name}-lambda-glue-policy-${var.environment}"
-  role = aws_iam_role.lambda_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "glue:StartJobRun",
-          "glue:GetJobRun",
-          "glue:GetJobRuns"
-        ]
-        Resource = aws_glue_job.etl_job.arn
-      }
-    ]
-  })
 }
 
 # Outputs

@@ -7,6 +7,7 @@ import json
 import os
 import logging
 import boto3
+from urllib.parse import unquote_plus
 
 # Configure logging
 logger = logging.getLogger()
@@ -41,7 +42,8 @@ def lambda_handler(event, context):
         glue_job_name = os.getenv('GLUE_JOB_NAME')
         destination_bucket = os.getenv('DESTINATION_BUCKET')
         output_prefix = os.getenv('OUTPUT_PREFIX', 'processed_data')
-        aws_region = os.getenv('AWS_REGION', 'us-east-1')
+        # AWS_REGION is automatically available in Lambda runtime environment
+        aws_region = os.getenv('AWS_REGION') or boto3.Session().region_name or 'us-east-1'
         
         if not glue_job_name:
             logger.error("GLUE_JOB_NAME environment variable not set")
@@ -69,7 +71,8 @@ def lambda_handler(event, context):
             
             s3_event = record.get('s3', {})
             bucket_name = s3_event.get('bucket', {}).get('name')
-            object_key = s3_event.get('object', {}).get('key')
+            # S3 event notifications URL-encode object keys, so decode them
+            object_key = unquote_plus(s3_event.get('object', {}).get('key', ''))
             
             if not bucket_name or not object_key:
                 logger.error("Missing bucket name or object key in S3 event")

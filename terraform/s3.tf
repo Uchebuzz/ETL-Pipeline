@@ -1,6 +1,6 @@
 # Source S3 Bucket for input data
 resource "aws_s3_bucket" "source" {
-  bucket = var.source_bucket_name != "" ? var.source_bucket_name : "${var.project_name}-source-${var.environment}-${random_id.bucket_suffix.hex}"
+  bucket = var.source_bucket_name
 
   tags = {
     Name        = "${var.project_name}-source"
@@ -36,7 +36,7 @@ resource "aws_s3_bucket_public_access_block" "source" {
 
 # Destination S3 Bucket for processed data
 resource "aws_s3_bucket" "destination" {
-  bucket = var.destination_bucket_name != "" ? var.destination_bucket_name : "${var.project_name}-output-${var.environment}-${random_id.bucket_suffix.hex}"
+  bucket = var.destination_bucket_name
 
   tags = {
     Name        = "${var.project_name}-destination"
@@ -68,11 +68,6 @@ resource "aws_s3_bucket_public_access_block" "destination" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
-}
-
-# Random ID for bucket naming
-resource "random_id" "bucket_suffix" {
-  byte_length = 4
 }
 
 # Outputs
