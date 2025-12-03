@@ -78,6 +78,8 @@ import_resource() {
     local resource_address=$1
     local resource_id=$2
     local description=$3
+    local project_root="$(cd .. && pwd)"
+    local lambda_package_dir="$project_root/lambda_package"
     
     echo -n "Importing $description... "
     
@@ -87,9 +89,9 @@ import_resource() {
         return 0
     fi
     
-    # Try to import with -refresh=false to avoid evaluating data sources
-    # This prevents errors when data sources depend on files that don't exist yet
-    IMPORT_OUTPUT=$(terraform import -refresh=false "$resource_address" "$resource_id" 2>&1)
+    # Try to import (terraform import doesn't support -refresh flag)
+    # Use -input=false to avoid prompts and -lock=false to avoid locking issues
+    IMPORT_OUTPUT=$(terraform import -input=false -lock=false "$resource_address" "$resource_id" 2>&1)
     IMPORT_EXIT_CODE=$?
     
     if [ $IMPORT_EXIT_CODE -eq 0 ]; then
@@ -102,26 +104,38 @@ import_resource() {
             # Return 0 for expected "not found" cases - this is normal for new deployments
             return 0
         else
-            # For data source or other errors, try again with -lock=false
-            # This might help if there are locking issues
-            IMPORT_OUTPUT2=$(terraform import -refresh=false -lock=false "$resource_address" "$resource_id" 2>&1)
-            IMPORT_EXIT_CODE2=$?
-            
-            if [ $IMPORT_EXIT_CODE2 -eq 0 ]; then
-                echo -e "${GREEN}Success (on retry)${NC}"
-                return 0
-            else
-                # Check if it's a data source error - these are expected and we can continue
-                if echo "$IMPORT_OUTPUT2" | grep -qiE "data\.[^:]*: Reading|Error reading|Failed to read|No such file or directory"; then
-                    echo -e "${YELLOW}Warning: Data source dependency issue - resource may need to be imported after dependencies are ready${NC}"
-                    echo -e "${YELLOW}  Error: $(echo "$IMPORT_OUTPUT2" | head -n 1)${NC}"
-                    # Return 1 to indicate this import failed - user should fix dependencies and retry
-                    return 1
+            # Check if it's a data source error - try to work around it
+            if echo "$IMPORT_OUTPUT" | grep -qiE "data\.[^:]*: Reading|Error reading|Failed to read|No such file or directory"; then
+                echo -e "${YELLOW}Data source dependency issue detected${NC}"
+                echo -e "${YELLOW}  Attempting to create missing dependencies...${NC}"
+                
+                # Try to ensure lambda package is ready
+                if [ -d "$lambda_package_dir" ] && [ ! -f "$project_root/terraform/lambda_function.zip" ]; then
+                    # Create a minimal zip file if it doesn't exist and zip command is available
+                    if command -v zip >/dev/null 2>&1; then
+                        cd "$lambda_package_dir"
+                        zip -q "$project_root/terraform/lambda_function.zip" ./* 2>/dev/null || true
+                        cd "$TERRAFORM_DIR"
+                    fi
+                fi
+                
+                # Try import again
+                IMPORT_OUTPUT2=$(terraform import -input=false -lock=false "$resource_address" "$resource_id" 2>&1)
+                IMPORT_EXIT_CODE2=$?
+                
+                if [ $IMPORT_EXIT_CODE2 -eq 0 ]; then
+                    echo -e "${GREEN}Success (after fixing dependencies)${NC}"
+                    return 0
                 else
-                    echo -e "${RED}Failed: $(echo "$IMPORT_OUTPUT2" | head -n 1)${NC}"
-                    # Return 1 for unexpected errors - these need to be fixed
+                    echo -e "${YELLOW}Warning: Still failing due to data source dependency${NC}"
+                    echo -e "${YELLOW}  Error: $(echo "$IMPORT_OUTPUT2" | head -n 1)${NC}"
+                    echo -e "${YELLOW}  You may need to run 'terraform apply' once to create dependencies, then import${NC}"
                     return 1
                 fi
+            else
+                echo -e "${RED}Failed: $(echo "$IMPORT_OUTPUT" | head -n 1)${NC}"
+                # Return 1 for unexpected errors - these need to be fixed
+                return 1
             fi
         fi
     fi
