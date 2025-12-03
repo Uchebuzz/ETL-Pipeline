@@ -2,7 +2,9 @@
 # Script to import existing AWS resources into Terraform state
 # This prevents "already exists" errors when applying Terraform
 
-set -e
+# Don't use set -e - we want to continue processing even if some imports fail
+# We'll track failures and exit with error at the end if critical imports failed
+IMPORT_FAILURES=0
 
 # Colors for output
 RED='\033[0;31m'
@@ -29,6 +31,22 @@ if [ ! -d ".terraform" ]; then
         echo -e "${RED}Error: Failed to initialize Terraform${NC}"
         exit 1
     }
+fi
+
+# Ensure lambda_package directory exists to avoid data source errors during import
+# This is needed because data.archive_file.lambda_zip depends on this directory
+PROJECT_ROOT="$(cd .. && pwd)"
+LAMBDA_PACKAGE_DIR="$PROJECT_ROOT/lambda_package"
+if [ ! -d "$LAMBDA_PACKAGE_DIR" ]; then
+    echo -e "${YELLOW}Creating lambda_package directory to avoid data source errors...${NC}"
+    mkdir -p "$LAMBDA_PACKAGE_DIR"
+    # Create a minimal placeholder if lambda_handler.py exists
+    if [ -f "$PROJECT_ROOT/lambda_handler.py" ]; then
+        cp "$PROJECT_ROOT/lambda_handler.py" "$LAMBDA_PACKAGE_DIR/" 2>/dev/null || true
+    else
+        # Create a minimal placeholder file
+        echo "# Placeholder for lambda package" > "$LAMBDA_PACKAGE_DIR/.placeholder"
+    fi
 fi
 
 echo -e "${GREEN}Starting resource import process...${NC}"
@@ -69,8 +87,9 @@ import_resource() {
         return 0
     fi
     
-    # Try to import
-    IMPORT_OUTPUT=$(terraform import "$resource_address" "$resource_id" 2>&1)
+    # Try to import with -refresh=false to avoid evaluating data sources
+    # This prevents errors when data sources depend on files that don't exist yet
+    IMPORT_OUTPUT=$(terraform import -refresh=false "$resource_address" "$resource_id" 2>&1)
     IMPORT_EXIT_CODE=$?
     
     if [ $IMPORT_EXIT_CODE -eq 0 ]; then
@@ -78,69 +97,87 @@ import_resource() {
         return 0
     else
         # Check if error is because resource doesn't exist or is already managed
-        if echo "$IMPORT_OUTPUT" | grep -q "already managed by Terraform\|does not exist\|ResourceNotFoundException"; then
+        if echo "$IMPORT_OUTPUT" | grep -qiE "already managed by Terraform|does not exist|ResourceNotFoundException"; then
             echo -e "${YELLOW}Not found or already managed${NC}"
             # Return 0 for expected "not found" cases - this is normal for new deployments
             return 0
         else
-            echo -e "${YELLOW}Failed: $(echo "$IMPORT_OUTPUT" | head -n 1)${NC}"
-            # Return 1 only for unexpected errors
-            return 1
+            # For data source or other errors, try again with -lock=false
+            # This might help if there are locking issues
+            IMPORT_OUTPUT2=$(terraform import -refresh=false -lock=false "$resource_address" "$resource_id" 2>&1)
+            IMPORT_EXIT_CODE2=$?
+            
+            if [ $IMPORT_EXIT_CODE2 -eq 0 ]; then
+                echo -e "${GREEN}Success (on retry)${NC}"
+                return 0
+            else
+                # Check if it's a data source error - these are expected and we can continue
+                if echo "$IMPORT_OUTPUT2" | grep -qiE "data\.[^:]*: Reading|Error reading|Failed to read|No such file or directory"; then
+                    echo -e "${YELLOW}Warning: Data source dependency issue - resource may need to be imported after dependencies are ready${NC}"
+                    echo -e "${YELLOW}  Error: $(echo "$IMPORT_OUTPUT2" | head -n 1)${NC}"
+                    # Return 1 to indicate this import failed - user should fix dependencies and retry
+                    return 1
+                else
+                    echo -e "${RED}Failed: $(echo "$IMPORT_OUTPUT2" | head -n 1)${NC}"
+                    # Return 1 for unexpected errors - these need to be fixed
+                    return 1
+                fi
+            fi
         fi
     fi
 }
 
 # Import S3 Buckets
-# Use || true to prevent script exit on expected "not found" errors
 if [ -n "$SOURCE_BUCKET" ]; then
-    import_resource "aws_s3_bucket.source" "$SOURCE_BUCKET" "Source S3 bucket ($SOURCE_BUCKET)" || true
+    import_resource "aws_s3_bucket.source" "$SOURCE_BUCKET" "Source S3 bucket ($SOURCE_BUCKET)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 fi
 
 if [ -n "$DEST_BUCKET" ]; then
-    import_resource "aws_s3_bucket.destination" "$DEST_BUCKET" "Destination S3 bucket ($DEST_BUCKET)" || true
+    import_resource "aws_s3_bucket.destination" "$DEST_BUCKET" "Destination S3 bucket ($DEST_BUCKET)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 fi
 
-import_resource "aws_s3_bucket.glue_scripts" "$GLUE_SCRIPTS_BUCKET" "Glue scripts S3 bucket ($GLUE_SCRIPTS_BUCKET)" || true
+import_resource "aws_s3_bucket.glue_scripts" "$GLUE_SCRIPTS_BUCKET" "Glue scripts S3 bucket ($GLUE_SCRIPTS_BUCKET)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 
 # Import CloudWatch Log Group (only if enable_cloudwatch is true)
 if [ "${TF_VAR_enable_cloudwatch:-true}" = "true" ]; then
     LOG_GROUP_NAME="${PROJECT_NAME}-${ENV}"
-    import_resource "aws_cloudwatch_log_group.etl_pipeline[0]" "$LOG_GROUP_NAME" "CloudWatch Log Group ($LOG_GROUP_NAME)" || true
+    import_resource "aws_cloudwatch_log_group.etl_pipeline[0]" "$LOG_GROUP_NAME" "CloudWatch Log Group ($LOG_GROUP_NAME)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 fi
 
 # Import IAM Roles
 LAMBDA_ROLE_NAME="${PROJECT_NAME}-lambda-role-${ENV}"
 GLUE_ROLE_NAME="${PROJECT_NAME}-glue-role-${ENV}"
 
-import_resource "aws_iam_role.lambda_role" "$LAMBDA_ROLE_NAME" "Lambda IAM Role ($LAMBDA_ROLE_NAME)" || true
-import_resource "aws_iam_role.glue_role" "$GLUE_ROLE_NAME" "Glue IAM Role ($GLUE_ROLE_NAME)" || true
+import_resource "aws_iam_role.lambda_role" "$LAMBDA_ROLE_NAME" "Lambda IAM Role ($LAMBDA_ROLE_NAME)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
+import_resource "aws_iam_role.glue_role" "$GLUE_ROLE_NAME" "Glue IAM Role ($GLUE_ROLE_NAME)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 
 # Import Lambda Function
 LAMBDA_FUNCTION_NAME="${PROJECT_NAME}-etl-${ENV}"
-import_resource "aws_lambda_function.etl_pipeline" "$LAMBDA_FUNCTION_NAME" "Lambda Function ($LAMBDA_FUNCTION_NAME)" || true
+import_resource "aws_lambda_function.etl_pipeline" "$LAMBDA_FUNCTION_NAME" "Lambda Function ($LAMBDA_FUNCTION_NAME)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 
 # Import Glue Job
 GLUE_JOB_NAME="${PROJECT_NAME}-etl-job-${ENV}"
-import_resource "aws_glue_job.etl_job" "$GLUE_JOB_NAME" "Glue Job ($GLUE_JOB_NAME)" || true
+import_resource "aws_glue_job.etl_job" "$GLUE_JOB_NAME" "Glue Job ($GLUE_JOB_NAME)" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 
 # Import IAM Role Policies (these are trickier - they use role name + policy name)
 if terraform state show aws_iam_role.lambda_role >/dev/null 2>&1; then
     LAMBDA_CLOUDWATCH_POLICY_NAME="${PROJECT_NAME}-lambda-cloudwatch-policy-${ENV}"
     LAMBDA_GLUE_POLICY_NAME="${PROJECT_NAME}-lambda-glue-policy-${ENV}"
     
-    import_resource "aws_iam_role_policy.lambda_cloudwatch_policy" "${LAMBDA_ROLE_NAME}:${LAMBDA_CLOUDWATCH_POLICY_NAME}" "Lambda CloudWatch Policy" || true
-    import_resource "aws_iam_role_policy.lambda_glue_policy" "${LAMBDA_ROLE_NAME}:${LAMBDA_GLUE_POLICY_NAME}" "Lambda Glue Policy" || true
+    import_resource "aws_iam_role_policy.lambda_cloudwatch_policy" "${LAMBDA_ROLE_NAME}:${LAMBDA_CLOUDWATCH_POLICY_NAME}" "Lambda CloudWatch Policy" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
+    import_resource "aws_iam_role_policy.lambda_glue_policy" "${LAMBDA_ROLE_NAME}:${LAMBDA_GLUE_POLICY_NAME}" "Lambda Glue Policy" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 fi
 
 if terraform state show aws_iam_role.glue_role >/dev/null 2>&1; then
     GLUE_S3_POLICY_NAME="${PROJECT_NAME}-glue-s3-policy-${ENV}"
     GLUE_CLOUDWATCH_POLICY_NAME="${PROJECT_NAME}-glue-cloudwatch-policy-${ENV}"
     
-    import_resource "aws_iam_role_policy.glue_s3_policy" "${GLUE_ROLE_NAME}:${GLUE_S3_POLICY_NAME}" "Glue S3 Policy" || true
-    import_resource "aws_iam_role_policy.glue_cloudwatch_policy" "${GLUE_ROLE_NAME}:${GLUE_CLOUDWATCH_POLICY_NAME}" "Glue CloudWatch Policy" || true
+    import_resource "aws_iam_role_policy.glue_s3_policy" "${GLUE_ROLE_NAME}:${GLUE_S3_POLICY_NAME}" "Glue S3 Policy" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
+    import_resource "aws_iam_role_policy.glue_cloudwatch_policy" "${GLUE_ROLE_NAME}:${GLUE_CLOUDWATCH_POLICY_NAME}" "Glue CloudWatch Policy" || IMPORT_FAILURES=$((IMPORT_FAILURES + 1))
 fi
 
 # Import S3 Bucket Configurations (these depend on buckets being imported first)
+# These are less critical, so we'll continue even if they fail
 if terraform state show aws_s3_bucket.source >/dev/null 2>&1 && [ -n "$SOURCE_BUCKET" ]; then
     import_resource "aws_s3_bucket_versioning.source" "$SOURCE_BUCKET" "Source bucket versioning" || true
     import_resource "aws_s3_bucket_server_side_encryption_configuration.source" "$SOURCE_BUCKET" "Source bucket encryption" || true
@@ -166,9 +203,20 @@ if [ "${TF_VAR_enable_cloudwatch:-true}" = "true" ]; then
 fi
 
 echo ""
-echo -e "${GREEN}Import process completed!${NC}"
-echo "Run 'terraform plan' to verify the state."
-echo ""
-echo "Note: Some resources may show as needing updates after import."
-echo "This is normal - Terraform will reconcile the differences on next apply."
+if [ $IMPORT_FAILURES -gt 0 ]; then
+    echo -e "${RED}Import process completed with $IMPORT_FAILURES failure(s)!${NC}"
+    echo -e "${YELLOW}Warning: Some resources could not be imported.${NC}"
+    echo -e "${YELLOW}If these resources exist in AWS, Terraform will fail to create them.${NC}"
+    echo -e "${YELLOW}Please fix the issues (e.g., ensure lambda_package directory exists) and run the import script again.${NC}"
+    echo ""
+    echo "Run 'terraform plan' to see what Terraform will try to create."
+    exit 1
+else
+    echo -e "${GREEN}Import process completed successfully!${NC}"
+    echo "Run 'terraform plan' to verify the state."
+    echo ""
+    echo "Note: Some resources may show as needing updates after import."
+    echo "This is normal - Terraform will reconcile the differences on next apply."
+    exit 0
+fi
 
