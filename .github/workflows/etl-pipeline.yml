@@ -57,10 +57,11 @@ jobs:
       - name: Terraform Validate
         run: |
           terraform init -backend=false
-          terraform validate \
-            -var="source_bucket_name=test-bucket" \
-            -var="destination_bucket_name=test-dest-bucket" \
-            -var="environment=dev"
+          terraform validate
+        env:
+          TF_VAR_source_bucket_name: test-bucket
+          TF_VAR_destination_bucket_name: test-dest-bucket
+          TF_VAR_environment: dev
         working-directory: ./terraform
 
   deploy:
@@ -89,7 +90,8 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform apply -auto-approve \
-            -var="source_bucket_name=${{ secrets.SOURCE_BUCKET_NAME || 'etl-pipeline-source-dev' }}" \
-            -var="destination_bucket_name=${{ secrets.DESTINATION_BUCKET_NAME || 'etl-pipeline-dest-dev' }}" \
-            -var="environment=dev"
+          terraform apply -auto-approve
+        env:
+          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME != '' && secrets.SOURCE_BUCKET_NAME || 'etl-pipeline-source-dev' }}
+          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME != '' && secrets.DESTINATION_BUCKET_NAME || 'etl-pipeline-dest-dev' }}
+          TF_VAR_environment: dev
