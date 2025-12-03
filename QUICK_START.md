@@ -26,10 +26,11 @@ AWS_REGION=us-east-1
 
 Then deploy the infrastructure:
 
-```powershell
+```bash
 cd terraform
-.\terraform.ps1 init
-.\terraform.ps1 apply
+../scripts/import_existing_resources.sh 
+./terraform.sh init
+./terraform.sh apply
 ```
 
 This creates:
