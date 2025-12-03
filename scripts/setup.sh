@@ -9,7 +9,7 @@ echo "Setting up ETL Pipeline..."
 python_version=$(python3 --version 2>&1 | awk '{print $2}')
 echo "Python version: $python_version"
 
-# Java no longer required (using pandas instead of PySpark)
+# Production pipeline uses AWS Glue with PySpark (serverless)
 
 # Create virtual environment
 if [ ! -d "venv" ]; then
@@ -44,6 +44,5 @@ echo ""
 echo "Next steps:"
 echo "1. Configure AWS credentials"
 echo "2. Deploy infrastructure: cd terraform && terraform init && terraform apply"
-echo "3. Upload a CSV file to the source S3 bucket (input/ prefix) to trigger the pipeline"
-echo "4. Or run locally: python etl_pipeline.py"
+echo "3. Upload a CSV file to the source S3 bucket (input/ prefix) to trigger the Glue job"
 

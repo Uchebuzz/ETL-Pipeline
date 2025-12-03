@@ -1,17 +1,16 @@
 # ETL Pipeline for Financial Data Processing
 
-A comprehensive ETL (Extract, Transform, Load) pipeline for processing financial data with AWS integration, automated CI/CD, and infrastructure as code.
+A serverless ETL (Extract, Transform, Load) pipeline for processing financial data using AWS Glue and Lambda. The pipeline automatically processes CSV files uploaded to S3 using PySpark for scalable data transformation.
 
 ## Features
 
-- **Data Ingestion**: Supports CSV and JSON formats from S3 (automatically triggered on upload)
-- **Data Transformation**: Uses pandas for efficient data processing
+- **Serverless Architecture**: AWS Glue handles Spark execution automatically
+- **S3-Triggered Processing**: Lambda triggers Glue jobs on CSV uploads
+- **PySpark Processing**: Scalable data transformation using Spark
 - **Data Storage**: Outputs data in Parquet format to S3
 - **Infrastructure as Code**: Terraform configuration for AWS resources
 - **CI/CD**: GitHub Actions workflow for automated testing and deployment
 - **Monitoring**: CloudWatch integration for logging and metrics
-- **Secrets Management**: Support for environment variables and HashiCorp Vault
-- **Containerization**: Docker and Docker Compose support
 
 ## Architecture
 
@@ -27,17 +26,20 @@ A comprehensive ETL (Extract, Transform, Load) pipeline for processing financial
        │
        ▼
 ┌─────────────┐
-│   Extract   │ (pandas from S3)
+│   Lambda    │ → Triggers AWS Glue Job
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│ Transform   │ (Clean, Enrich, Aggregate)
+│ AWS Glue    │ → PySpark ETL Processing
+│   (PySpark) │   - Extract from S3
+│             │   - Transform data
+│             │   - Load to S3 as Parquet
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│    Load     │ (Parquet to S3 Destination)
+│ S3 Output   │ → Parquet files in destination bucket
 └─────────────┘
 ```
 
@@ -46,7 +48,7 @@ A comprehensive ETL (Extract, Transform, Load) pipeline for processing financial
 - Python 3.9+
 - AWS CLI configured with credentials
 - Terraform 1.0+ (for infrastructure deployment)
-- Docker (optional, for containerized execution)
+- Docker (optional, for local testing)
 
 ## Installation
 
@@ -86,7 +88,8 @@ terraform apply
 
 This creates:
 - Source and destination S3 buckets
-- Lambda function for S3-triggered processing
+- Lambda function (triggers Glue jobs)
+- AWS Glue job (PySpark ETL processing)
 - IAM roles and policies
 - CloudWatch log groups
 - S3 event notifications
@@ -103,25 +106,31 @@ SOURCE_BUCKET=$(terraform output -raw source_bucket_name)
 aws s3 cp your_data.csv s3://$SOURCE_BUCKET/input/your_data.csv
 ```
 
-The Lambda function will automatically trigger and process the file!
+The Lambda function will automatically trigger the Glue job to process the file!
 
-### 3. Run ETL Pipeline Locally (Optional)
+### 3. Monitor Glue Job Execution
 
+**View CloudWatch Logs:**
 ```bash
-export AWS_ACCESS_KEY_ID=your_key
-export AWS_SECRET_ACCESS_KEY=your_secret
-export DESTINATION_BUCKET=your-bucket-name
-export SOURCE_PATH=s3://your-source-bucket/input/your_data.csv
-export SOURCE_TYPE=s3
+# Lambda logs
+aws logs tail /aws/lambda/etl-pipeline-etl-dev --follow
 
-python etl_pipeline.py
+# Glue job logs
+aws logs tail /aws-glue/jobs/output --follow
 ```
 
-### 4. Run with Docker
-
+**Check Processed Data:**
 ```bash
-docker-compose up --build
+DEST_BUCKET=$(terraform output -raw destination_bucket_name)
+aws s3 ls s3://$DEST_BUCKET/processed_data/ --recursive
 ```
+
+**Check Glue Job Status:**
+```bash
+GLUE_JOB=$(terraform output -raw glue_job_name)
+aws glue get-job-runs --job-name $GLUE_JOB --max-items 1
+```
+
 
 ## Configuration
 
@@ -129,7 +138,7 @@ docker-compose up --build
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AWS_REGION` | AWS region | `us-west-1` |
+| `AWS_REGION` | AWS region | `us-east-1` |
 | `AWS_ACCESS_KEY_ID` | AWS access key | Required |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key | Required |
 | `SOURCE_PATH` | Path to source data | `data/sample_financial_data.csv` |
@@ -144,13 +153,20 @@ docker-compose up --build
 Edit `terraform/variables.tf` or use `terraform.tfvars`:
 
 ```hcl
-aws_region            = "us-west-1"
+aws_region            = "us-east-1"
 environment           = "dev"
 project_name          = "etl-pipeline"
 enable_cloudwatch     = true
-enable_ec2            = false
-ec2_instance_type     = "t3.medium"
 ```
+
+### Glue Job Configuration
+
+The Glue job is configured in `terraform/glue.tf`:
+- **Glue Version**: 4.0
+- **Worker Type**: G.1X (serverless)
+- **Number of Workers**: 2
+- **Timeout**: 60 minutes
+- **Python Version**: 3
 
 ## CI/CD with GitHub Actions
 
@@ -159,7 +175,7 @@ The pipeline includes a GitHub Actions workflow that:
 1. **Tests**: Runs linting and unit tests
 2. **Validates**: Validates Terraform configuration
 3. **Deploys**: Deploys infrastructure to AWS
-4. **Executes**: Runs the ETL pipeline
+4. **Executes**: Triggers Glue job for testing
 
 ### Setting up GitHub Secrets
 
@@ -180,82 +196,45 @@ The workflow triggers on:
 
 ### CloudWatch Integration
 
-The pipeline automatically logs to CloudWatch when enabled:
+The pipeline automatically logs to CloudWatch:
 
-- **Log Group**: `etl-pipeline` (configurable)
-- **Metrics**: Pipeline start, completion, errors, duration, records processed
+- **Lambda Log Group**: `/aws/lambda/etl-pipeline-etl-{env}`
+- **Glue Log Group**: `/aws-glue/jobs/output`
+- **Metrics**: Job start, completion, errors, duration, records processed
 - **Alarms**: Error threshold monitoring
 
 View logs:
 ```bash
-aws logs tail /aws/etl-pipeline --follow
+# Lambda logs
+aws logs tail /aws/lambda/etl-pipeline-etl-dev --follow
+
+# Glue job logs
+aws logs tail /aws-glue/jobs/output --follow
 ```
 
-### Local Logging
-
-Logs are also written to console and can be redirected to files:
-
-```bash
-python etl_pipeline.py 2>&1 | tee logs/etl_$(date +%Y%m%d_%H%M%S).log
-```
-
-## Secrets Management
-
-### Environment Variables (Default)
-
-Store credentials in environment variables or `.env` file:
-
-```bash
-export AWS_ACCESS_KEY_ID=your_key
-export AWS_SECRET_ACCESS_KEY=your_secret
-```
-
-### HashiCorp Vault
-
-1. Set environment variables:
-   ```bash
-   export VAULT_ADDR=https://your-vault-address
-   export VAULT_TOKEN=your-vault-token
-   export USE_VAULT=true
-   ```
-
-2. Store credentials in Vault:
-   ```bash
-   vault kv put aws/credentials \
-     aws_access_key_id=your_key \
-     aws_secret_access_key=your_secret
-   ```
-
-### AWS Secrets Manager
-
-Alternatively, use AWS Secrets Manager (see `secrets/README.md` for details).
 
 ## Project Structure
 
 ```
 ETL_Pipeline/
-├── etl_pipeline.py          # Main ETL pipeline
-├── data_generator.py         # Sample data generator
-├── config.py                 # Configuration management
+├── glue_etl_job.py          # AWS Glue ETL script (PySpark)
+├── lambda_handler.py         # Lambda handler (triggers Glue)
 ├── requirements.txt          # Python dependencies
-├── Dockerfile                # Docker image definition
-├── docker-compose.yml        # Docker Compose configuration
 ├── .github/
 │   └── workflows/
 │       └── etl-pipeline.yml  # GitHub Actions workflow
 ├── terraform/
 │   ├── main.tf              # Terraform main configuration
 │   ├── variables.tf         # Variable definitions
-│   ├── s3.tf                # S3 bucket resources
-│   ├── iam.tf               # IAM roles and policies
-│   ├── cloudwatch.tf        # CloudWatch resources
-│   ├── ec2.tf               # EC2 instance (optional)
-│   └── outputs.tf           # Output values
+│   ├── s3.tf               # S3 bucket resources
+│   ├── lambda.tf           # Lambda function resources
+│   ├── glue.tf             # AWS Glue job resources
+│   ├── iam.tf              # IAM roles and policies
+│   ├── cloudwatch.tf       # CloudWatch resources
+│   └── outputs.tf          # Output values
 ├── monitoring/
-│   └── cloudwatch_setup.py  # CloudWatch monitoring utilities
-├── secrets/
-│   └── README.md            # Secrets management documentation
-└── data/                     # Data directory (gitignored)
+│   └── cloudwatch_setup.py # CloudWatch monitoring utilities
+└── data/                    # Data directory (gitignored)
 ```
 
 ## Data Format
@@ -265,24 +244,6 @@ ETL_Pipeline/
 ```csv
 Transaction ID,Date,Transaction Type,Category,Amount,Currency,Account ID,Description,Status
 TXN-000001,2024-01-15,Purchase,Retail,1500.00,USD,ACC-1234,Sample transaction 1,Completed
-```
-
-### Input Format (JSON)
-
-```json
-[
-  {
-    "transaction_id": "TXN-000001",
-    "date": "2024-01-15",
-    "transaction_type": "Purchase",
-    "category": "Retail",
-    "amount": 1500.00,
-    "currency": "USD",
-    "account_id": "ACC-1234",
-    "description": "Sample transaction 1",
-    "status": "Completed"
-  }
-]
 ```
 
 ### Output Format (Parquet)
@@ -298,31 +259,32 @@ s3://bucket/processed_data/date=20240115_120000/
 
 ### Common Issues
 
-1. **Java not found**
-   - Install Java 11+: `sudo apt-get install openjdk-11-jdk`
-   - Set `JAVA_HOME` environment variable
+1. **Glue Job Not Starting**
+   - Check Lambda logs for errors
+   - Verify Glue job name is correct
+   - Check IAM permissions for Lambda to trigger Glue
 
-2. **AWS credentials not found**
+2. **Glue Job Failing**
+   - Check Glue job logs in CloudWatch
+   - Verify S3 paths are correct
+   - Check Glue script syntax
+
+3. **AWS credentials not found**
    - Verify credentials are set: `aws configure list`
    - Check environment variables or Vault configuration
 
-3. **S3 access denied**
+4. **S3 access denied**
    - Verify IAM permissions
    - Check bucket policies
    - Ensure bucket exists
 
-4. **Memory issues with large datasets**
-   - Process data in chunks using pandas chunking
-   - Consider using AWS Glue or EMR for very large datasets
-   - Increase Lambda memory allocation if using Lambda
+5. **Lambda timeout**
+   - Lambda only triggers Glue, timeout should be minimal (60 seconds)
+   - Processing happens in Glue, not Lambda
 
 ## Testing
 
-Run tests (when test files are added):
-
-```bash
-pytest test_etl.py -v
-```
+The ETL pipeline is tested through AWS Glue job execution. Monitor job runs and logs to verify functionality.
 
 ## Contributing
 

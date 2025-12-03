@@ -32,6 +32,8 @@ terraform apply
 This creates:
 - Source S3 bucket (for uploading CSV files)
 - Destination S3 bucket (for processed Parquet files)
+- S3 bucket for Glue scripts
+- AWS Glue job (PySpark ETL processing)
 - Lambda function (automatically triggered on CSV upload)
 - IAM roles and permissions
 - CloudWatch logging
@@ -46,9 +48,10 @@ SOURCE_BUCKET=$(terraform output -raw source_bucket_name)
 aws s3 cp your_financial_data.csv s3://$SOURCE_BUCKET/input/your_financial_data.csv
 ```
 
-**That's it!** The Lambda function automatically:
-- Detects the CSV upload
-- Extracts data from S3
+**That's it!** The pipeline automatically:
+- Lambda detects the CSV upload
+- Lambda triggers AWS Glue job
+- Glue processes data with PySpark
 - Transforms and cleans the data
 - Loads as Parquet to the destination bucket
 
@@ -59,29 +62,19 @@ aws s3 cp your_financial_data.csv s3://$SOURCE_BUCKET/input/your_financial_data.
 DEST_BUCKET=$(terraform output -raw destination_bucket_name)
 aws s3 ls s3://$DEST_BUCKET/processed_data/ --recursive
 
-# View CloudWatch logs
-aws logs tail /aws/etl-pipeline --follow
-```
+# View Lambda logs
+LAMBDA_NAME=$(terraform output -raw lambda_function_name)
+aws logs tail /aws/lambda/$LAMBDA_NAME --follow
 
-## Run Locally (Optional)
-
-```bash
-export SOURCE_PATH=s3://your-source-bucket/input/your_data.csv
-export SOURCE_TYPE=s3
-export DESTINATION_BUCKET=your-destination-bucket
-python etl_pipeline.py
-```
-
-## Docker Quick Start
-
-```bash
-docker-compose up --build
+# View Glue job status
+GLUE_JOB=$(terraform output -raw glue_job_name)
+aws glue get-job-runs --job-name $GLUE_JOB --max-items 1
 ```
 
 ## What's Next?
 
 - Read [README.md](README.md) for detailed documentation
 - Check [SETUP_GUIDE.md](SETUP_GUIDE.md) for comprehensive setup
+- Review [DEPLOYMENT.md](DEPLOYMENT.md) for deployment details
 - Review `terraform/` for infrastructure options
 - See `.github/workflows/` for CI/CD setup
-

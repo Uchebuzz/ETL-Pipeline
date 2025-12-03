@@ -5,9 +5,8 @@ This guide will help you set up and run the ETL pipeline step by step.
 ## Prerequisites Checklist
 
 - [ ] Python 3.9+ installed
-- [ ] Python 3.9+ installed
 - [ ] AWS CLI configured
-- [ ] AWS credentials with S3 access
+- [ ] AWS credentials with S3, Lambda, and Glue access
 - [ ] Terraform 1.0+ (for infrastructure)
 - [ ] Git (for version control)
 
@@ -36,7 +35,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Generate sample data
+# Generate sample data (optional)
 python data_generator.py
 ```
 
@@ -61,7 +60,7 @@ cp .env.example .env
 # Edit .env with your credentials
 ```
 
-## Step 3: Deploy Infrastructure (Optional)
+## Step 3: Deploy Infrastructure
 
 ### Initialize Terraform
 ```bash
@@ -82,6 +81,9 @@ terraform apply
 This creates:
 - Source S3 bucket
 - Destination S3 bucket
+- Glue scripts S3 bucket
+- AWS Glue job
+- Lambda function
 - IAM roles and policies
 - CloudWatch log groups
 
@@ -90,47 +92,52 @@ This creates:
 terraform output
 ```
 
+Save these values for later use:
+- `source_bucket_name`
+- `destination_bucket_name`
+- `lambda_function_name`
+- `glue_job_name`
+
 ## Step 4: Run ETL Pipeline
 
-### Local Execution
-```bash
-# Set environment variables
-export SOURCE_PATH=data/sample_financial_data.csv
-export SOURCE_TYPE=local
-export DESTINATION_BUCKET=your-bucket-name
+### Automated (Recommended)
 
-# Run pipeline
-python etl_pipeline.py
+Upload a CSV file to trigger the pipeline:
+
+```bash
+# Get bucket name
+SOURCE_BUCKET=$(terraform output -raw source_bucket_name)
+
+# Upload CSV file
+aws s3 cp your_data.csv s3://$SOURCE_BUCKET/input/your_data.csv
 ```
 
-### Using Helper Script
-```bash
-chmod +x scripts/run_local.sh
-./scripts/run_local.sh
-```
+The Lambda function will automatically trigger the Glue job!
 
-### From S3
-```bash
-# Upload data to S3 first
-python scripts/upload_to_s3.py --bucket your-source-bucket --file data/sample_financial_data.csv
-
-# Run pipeline
-export SOURCE_PATH=s3://your-source-bucket/input/sample_financial_data.csv
-export SOURCE_TYPE=s3
-export DESTINATION_BUCKET=your-destination-bucket
-python etl_pipeline.py
-```
 
 ## Step 5: Verify Results
 
 ### Check S3 Output
 ```bash
-aws s3 ls s3://your-destination-bucket/processed_data/ --recursive
+DEST_BUCKET=$(terraform output -raw destination_bucket_name)
+aws s3 ls s3://$DEST_BUCKET/processed_data/ --recursive
 ```
 
-### View CloudWatch Logs
+### View Lambda Logs
 ```bash
-aws logs tail /aws/etl-pipeline --follow
+LAMBDA_NAME=$(terraform output -raw lambda_function_name)
+aws logs tail /aws/lambda/$LAMBDA_NAME --follow
+```
+
+### View Glue Job Logs
+```bash
+aws logs tail /aws-glue/jobs/output --follow
+```
+
+### Check Glue Job Status
+```bash
+GLUE_JOB=$(terraform output -raw glue_job_name)
+aws glue get-job-runs --job-name $GLUE_JOB --max-items 1
 ```
 
 ## Step 6: Set Up CI/CD (Optional)
@@ -160,28 +167,6 @@ aws logs tail /aws/etl-pipeline --follow
 
 4. **Workflow will run automatically** on push to main branch
 
-## Step 7: Docker Setup (Optional)
-
-### Build Docker Image
-```bash
-docker build -t etl-pipeline .
-```
-
-### Run with Docker
-```bash
-docker run --rm \
-  -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-  -e DESTINATION_BUCKET=your-bucket \
-  -v $(pwd)/data:/app/data \
-  etl-pipeline
-```
-
-### Docker Compose
-```bash
-docker-compose up --build
-```
-
 ## Troubleshooting
 
 ### Python Not Found
@@ -198,13 +183,24 @@ brew install python3
 
 ### AWS Credentials Error
 - Verify credentials: `aws sts get-caller-identity`
-- Check IAM permissions
-- Verify bucket exists and is accessible
+- Check IAM permissions (S3, Lambda, Glue access)
+- Verify buckets exist and are accessible
 
-### Memory Issues with Large Datasets
-- Process data in chunks using pandas
-- Consider using AWS Glue or EMR for very large datasets
-- Increase Lambda memory if using Lambda
+### Lambda Not Triggering
+- Check S3 event notification configuration
+- Verify file is in `input/` prefix with `.csv` extension
+- Check Lambda logs for errors
+
+### Glue Job Not Starting
+- Check Lambda logs for errors
+- Verify Glue job exists and is accessible
+- Check IAM permissions for Lambda to trigger Glue
+
+### Glue Job Failing
+- Check Glue job logs in CloudWatch
+- Verify S3 paths are correct
+- Check Glue script syntax
+- Verify Glue has S3 access permissions
 
 ### Terraform Errors
 - Run `terraform init` first
@@ -212,19 +208,31 @@ brew install python3
 - Verify region is correct
 - Check for resource name conflicts
 
+## Architecture Overview
+
+```
+S3 Upload → Lambda Trigger → AWS Glue Job → S3 Output
+```
+
+- **S3**: Stores input CSV files and output Parquet files
+- **Lambda**: Lightweight trigger (60s timeout, 128MB memory)
+- **Glue**: Serverless Spark processing (scales automatically)
+- **CloudWatch**: Logging and monitoring
+
 ## Next Steps
 
-- [ ] Customize transformation logic
+- [ ] Customize Glue transformation logic (`glue_etl_job.py`)
 - [ ] Add data validation rules
-- [ ] Set up scheduled runs
-- [ ] Configure alerts
+- [ ] Set up scheduled runs (EventBridge)
+- [ ] Configure alerts and notifications
 - [ ] Add more data sources
-- [ ] Implement incremental processing
+- [ ] Implement incremental processing with Glue bookmarks
+- [ ] Set up Glue job monitoring dashboards
 
 ## Getting Help
 
 - Check README.md for detailed documentation
+- Review DEPLOYMENT.md for deployment details
 - Review CloudWatch logs for errors
 - Check GitHub Issues
 - Review AWS CloudWatch metrics
-

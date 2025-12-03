@@ -8,15 +8,12 @@ if (Test-Path "lambda_package") {
 }
 New-Item -ItemType Directory -Path "lambda_package" | Out-Null
 
-# Copy Python files
-Copy-Item "etl_pipeline.py" -Destination "lambda_package\"
+# Copy Python files (Lambda only triggers Glue, no ETL code needed)
 Copy-Item "lambda_handler.py" -Destination "lambda_package\"
-Copy-Item "config.py" -Destination "lambda_package\"
 
-# Install only lightweight dependencies (heavy deps go in Lambda Layer)
+# Install only lightweight dependencies (boto3 for Glue client)
 Write-Host "Installing lightweight dependencies..." -ForegroundColor Cyan
-# Only install boto3, botocore, watchtower - pandas/numpy/pyarrow go in layer
-pip install boto3 botocore watchtower -t lambda_package\ --upgrade
+pip install boto3 -t lambda_package\ --upgrade
 
 # Aggressively remove unnecessary files to reduce package size
 Write-Host "Cleaning up unnecessary files..." -ForegroundColor Cyan

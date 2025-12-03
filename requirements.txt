@@ -1,17 +1,6 @@
-# Core ETL Pipeline Dependencies
+# Core AWS Dependencies
 boto3>=1.28.0
 botocore>=1.31.0
-
-# Data Processing
-pandas>=2.0.0
-numpy>=1.24.0
-pyarrow>=12.0.0  # For Parquet file support
-
-# Monitoring and Logging
-watchtower>=3.0.0
-
-# Secrets Management (optional)
-hvac>=1.1.0  # For HashiCorp Vault
 
 # Testing (optional)
 pytest>=7.4.0
@@ -23,4 +12,3 @@ black>=23.7.0
 
 # Utilities
 python-dotenv>=1.0.0
-

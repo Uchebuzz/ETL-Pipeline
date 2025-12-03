@@ -9,15 +9,12 @@ echo "Packaging Lambda function..."
 mkdir -p lambda_package
 rm -rf lambda_package/*
 
-# Copy Python files
-cp etl_pipeline.py lambda_package/
+# Copy Python files (Lambda only triggers Glue, no ETL code needed)
 cp lambda_handler.py lambda_package/
-cp config.py lambda_package/
 
-# Install only lightweight dependencies (heavy deps go in Lambda Layer)
+# Install only lightweight dependencies (boto3 for Glue client)
 echo "Installing lightweight dependencies..."
-# Only install boto3, botocore, watchtower - pandas/numpy/pyarrow go in layer
-pip install boto3 botocore watchtower -t lambda_package/ --upgrade
+pip install boto3 -t lambda_package/ --upgrade
 
 # Aggressively remove unnecessary files to reduce package size
 echo "Cleaning up unnecessary files..."

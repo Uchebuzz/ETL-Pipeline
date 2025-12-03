@@ -11,7 +11,7 @@ try {
     exit 1
 }
 
-# Java no longer required (using pandas instead of PySpark)
+# Production pipeline uses AWS Glue with PySpark (serverless)
 
 # Create virtual environment
 if (-not (Test-Path "venv")) {
@@ -47,6 +47,5 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "1. Configure AWS credentials"
 Write-Host "2. Deploy infrastructure: cd terraform; terraform init; terraform apply"
-Write-Host "3. Upload a CSV file to the source S3 bucket (input/ prefix) to trigger the pipeline"
-Write-Host "4. Or run locally: python etl_pipeline.py"
+Write-Host "3. Upload a CSV file to the source S3 bucket (input/ prefix) to trigger the Glue job"
 
