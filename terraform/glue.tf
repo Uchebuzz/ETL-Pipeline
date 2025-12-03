@@ -2,6 +2,10 @@
 resource "aws_s3_bucket" "glue_scripts" {
   bucket = var.glue_scripts_bucket_name != "" ? var.glue_scripts_bucket_name : "${var.project_name}-glue-scripts-${var.environment}"
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
     Name        = "${var.project_name}-glue-scripts"
     Environment = var.environment

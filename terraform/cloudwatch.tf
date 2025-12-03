@@ -4,6 +4,10 @@ resource "aws_cloudwatch_log_group" "etl_pipeline" {
   name              = "${var.project_name}-${var.environment}"
   retention_in_days = 30
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
     Name = "${var.project_name}-logs"
   }

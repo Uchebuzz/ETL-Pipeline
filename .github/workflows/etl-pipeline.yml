@@ -87,10 +87,40 @@ jobs:
         with:
           terraform_version: 1.5.0
       
-      - name: Terraform Apply
+      - name: Terraform Init
         run: |
           cd terraform
           terraform init
+        env:
+          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
+          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_environment: dev
+      
+      - name: Import Existing Resources (if any)
+        run: |
+          cd terraform
+          # Get project name from variable or use default
+          PROJECT_NAME="${TF_VAR_project_name:-etl-pipeline}"
+          ENV="${TF_VAR_environment:-dev}"
+          
+          # Construct resource names
+          LOG_GROUP_NAME="${PROJECT_NAME}-${ENV}"
+          BUCKET_NAME="${PROJECT_NAME}-glue-scripts-${ENV}"
+          
+          # Try to import CloudWatch Log Group if it exists (ignore all errors)
+          terraform import aws_cloudwatch_log_group.etl_pipeline[0] "$LOG_GROUP_NAME" 2>&1 || true
+          
+          # Try to import S3 Bucket if it exists (ignore all errors)
+          terraform import aws_s3_bucket.glue_scripts "$BUCKET_NAME" 2>&1 || true
+        env:
+          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
+          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_environment: dev
+        continue-on-error: true
+      
+      - name: Terraform Apply
+        run: |
+          cd terraform
           terraform apply -auto-approve
         env:
           TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}

@@ -38,38 +38,22 @@ resource "null_resource" "package_lambda" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["PowerShell", "-Command"]
-    command     = <<-EOT
-      $ErrorActionPreference = "Stop"
-      # Change to project root directory
-      $projectRoot = Resolve-Path (Join-Path "${path.module}" "..")
-      Push-Location $projectRoot
+    command = <<-EOT
+      set -e
+      PROJECT_ROOT="$(cd "${path.module}/.." && pwd)"
+      cd "$PROJECT_ROOT"
       
-      try {
-        $scriptPath = Join-Path $projectRoot "scripts\package_lambda.ps1"
-        if (Test-Path $scriptPath) {
-          & $scriptPath
-        } else {
-          # Fallback: Create package directory manually
-          $lambdaPackagePath = Join-Path $projectRoot "lambda_package"
-          if (-not (Test-Path $lambdaPackagePath)) {
-            New-Item -ItemType Directory -Path $lambdaPackagePath -Force | Out-Null
-          }
-          
-          $files = @("lambda_handler.py")
-          foreach ($file in $files) {
-            $sourceFile = Join-Path $projectRoot $file
-            if (Test-Path $sourceFile) {
-              Copy-Item $sourceFile -Destination $lambdaPackagePath -Force
-              Write-Host "Copied $file to lambda_package"
-            }
-          }
-          
-          Write-Host "Lambda package directory created at $lambdaPackagePath"
-        }
-      } finally {
-        Pop-Location
-      }
+      if [ -f "scripts/package_lambda.sh" ]; then
+        bash scripts/package_lambda.sh
+      elif [ -f "scripts/package_lambda.ps1" ]; then
+        powershell -Command "& { $ErrorActionPreference = 'Stop'; & 'scripts/package_lambda.ps1' }" || \
+        pwsh -Command "& { $ErrorActionPreference = 'Stop'; & 'scripts/package_lambda.ps1' }"
+      else
+        # Fallback: Create package directory manually
+        mkdir -p lambda_package
+        cp lambda_handler.py lambda_package/ 2>/dev/null || true
+        echo "Lambda package directory created at $PROJECT_ROOT/lambda_package"
+      fi
     EOT
   }
 }
