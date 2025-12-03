@@ -129,7 +129,7 @@ The pipeline includes a simple GitHub Actions workflow that:
 
 1. **Tests**: Runs linting checks
 2. **Validates**: Validates Terraform configuration
-3. **Deploys**: Automatically deploys infrastructure to AWS on pushes to `main` branch
+3. **Deploys**: Automatically deploys infrastructure to AWS on pushes to `master` branch
 
 ### Setting up GitHub Secrets
 
@@ -141,8 +141,8 @@ Configure the following secrets in your GitHub repository:
 - `DESTINATION_BUCKET_NAME` (optional) - Defaults to `etl-pipeline-dest-dev`
 
 The workflow triggers on:
-- Push to `main` branch (runs tests, validation, and deployment)
-- Pull requests to `main` (runs tests and validation only)
+- Push to `master` branch (runs tests, validation, and deployment)
+- Pull requests to `master` (runs tests and validation only)
 
 ## Monitoring
 
