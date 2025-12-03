@@ -93,6 +93,6 @@ jobs:
           terraform init
           terraform apply -auto-approve
         env:
-          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME != '' && secrets.SOURCE_BUCKET_NAME || 'etl-pipeline-source-dev' }}
-          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME != '' && secrets.DESTINATION_BUCKET_NAME || 'etl-pipeline-dest-dev' }}
+          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
+          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
           TF_VAR_environment: dev
