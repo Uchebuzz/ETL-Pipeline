@@ -13,7 +13,7 @@ variable "environment" {
 variable "project_name" {
   description = "Project name for resource naming"
   type        = string
-  default     = "etl-pipeline"
+  default     = "etl-pipeline-unique"
 }
 
 variable "source_bucket_name" {
