@@ -77,59 +77,14 @@ A serverless ETL (Extract, Transform, Load) pipeline for processing financial da
 
 ## Quick Start
 
-### 1. Deploy Infrastructure with Terraform
+For a quick setup guide, see [QUICK_START.md](QUICK_START.md).
 
-```bash
-cd terraform
-terraform init
-terraform plan
-terraform apply
-```
-
-This creates:
-- Source and destination S3 buckets
-- Lambda function (triggers Glue jobs)
-- AWS Glue job (PySpark ETL processing)
-- IAM roles and policies
-- CloudWatch log groups
-- S3 event notifications
-
-### 2. Upload CSV File to Trigger Pipeline
-
-Upload a CSV file to the source S3 bucket's `input/` prefix:
-
-```bash
-# Get the source bucket name from Terraform output
-SOURCE_BUCKET=$(terraform output -raw source_bucket_name)
-
-# Upload your CSV file
-aws s3 cp your_data.csv s3://$SOURCE_BUCKET/input/your_data.csv
-```
-
-The Lambda function will automatically trigger the Glue job to process the file!
-
-### 3. Monitor Glue Job Execution
-
-**View CloudWatch Logs:**
-```bash
-# Lambda logs
-aws logs tail /aws/lambda/etl-pipeline-etl-dev --follow
-
-# Glue job logs
-aws logs tail /aws-glue/jobs/output --follow
-```
-
-**Check Processed Data:**
-```bash
-DEST_BUCKET=$(terraform output -raw destination_bucket_name)
-aws s3 ls s3://$DEST_BUCKET/processed_data/ --recursive
-```
-
-**Check Glue Job Status:**
-```bash
-GLUE_JOB=$(terraform output -raw glue_job_name)
-aws glue get-job-runs --job-name $GLUE_JOB --max-items 1
-```
+The quick start guide covers:
+- Installing dependencies
+- Setting up AWS credentials
+- Deploying infrastructure with Terraform
+- Uploading CSV files to trigger the pipeline
+- Monitoring pipeline execution
 
 
 ## Configuration
@@ -170,27 +125,24 @@ The Glue job is configured in `terraform/glue.tf`:
 
 ## CI/CD with GitHub Actions
 
-The pipeline includes a GitHub Actions workflow that:
+The pipeline includes a simple GitHub Actions workflow that:
 
-1. **Tests**: Runs linting and unit tests
+1. **Tests**: Runs linting checks
 2. **Validates**: Validates Terraform configuration
-3. **Deploys**: Deploys infrastructure to AWS
-4. **Executes**: Triggers Glue job for testing
+3. **Deploys**: Automatically deploys infrastructure to AWS on pushes to `main` branch
 
 ### Setting up GitHub Secrets
 
 Configure the following secrets in your GitHub repository:
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `SOURCE_PATH` (optional)
-- `DESTINATION_BUCKET` (optional)
-- `CLOUDWATCH_LOG_GROUP` (optional)
+- `AWS_ACCESS_KEY_ID` - Required for deployment
+- `AWS_SECRET_ACCESS_KEY` - Required for deployment
+- `SOURCE_BUCKET_NAME` (optional) - Defaults to `etl-pipeline-source-dev`
+- `DESTINATION_BUCKET_NAME` (optional) - Defaults to `etl-pipeline-dest-dev`
 
 The workflow triggers on:
-- Push to `main` or `develop` branches
-- Pull requests to `main`
-- Manual workflow dispatch
+- Push to `main` branch (runs tests, validation, and deployment)
+- Pull requests to `main` (runs tests and validation only)
 
 ## Monitoring
 
@@ -203,37 +155,35 @@ The pipeline automatically logs to CloudWatch:
 - **Metrics**: Job start, completion, errors, duration, records processed
 - **Alarms**: Error threshold monitoring
 
-View logs:
-```bash
-# Lambda logs
-aws logs tail /aws/lambda/etl-pipeline-etl-dev --follow
-
-# Glue job logs
-aws logs tail /aws-glue/jobs/output --follow
-```
-
-
 ## Project Structure
 
 ```
 ETL_Pipeline/
 ├── glue_etl_job.py          # AWS Glue ETL script (PySpark)
-├── lambda_handler.py         # Lambda handler (triggers Glue)
-├── requirements.txt          # Python dependencies
+├── lambda_handler.py        # Lambda handler (triggers Glue)
+├── requirements.txt         # Python dependencies
+├── README.md                # Project documentation
+├── QUICK_START.md           # Quick start guide
 ├── .github/
 │   └── workflows/
-│       └── etl-pipeline.yml  # GitHub Actions workflow
+│       └── etl-pipeline.yml # GitHub Actions CI/CD workflow
 ├── terraform/
-│   ├── main.tf              # Terraform main configuration
-│   ├── variables.tf         # Variable definitions
+│   ├── main.tf             # Terraform main configuration
+│   ├── variables.tf        # Variable definitions
 │   ├── s3.tf               # S3 bucket resources
-│   ├── lambda.tf           # Lambda function resources
+│   ├── lambda.tf           # Lambda function & IAM roles
 │   ├── glue.tf             # AWS Glue job resources
-│   ├── iam.tf              # IAM roles and policies
 │   ├── cloudwatch.tf       # CloudWatch resources
-│   └── outputs.tf          # Output values
+│   └── terraform.ps1       # PowerShell Terraform wrapper
+├── scripts/
+│   ├── monitor_pipeline.py # Monitor pipeline execution
+│   ├── upload_to_s3.py     # Upload files to S3
+│   ├── package_lambda.sh   # Package Lambda (Linux/Mac)
+│   ├── package_lambda.ps1  # Package Lambda (Windows)
+│   └── setup.ps1           # Setup script (Windows)
 ├── monitoring/
 │   └── cloudwatch_setup.py # CloudWatch monitoring utilities
+├── lambda_package/          # Lambda package directory (generated)
 └── data/                    # Data directory (gitignored)
 ```
 
@@ -254,62 +204,3 @@ s3://bucket/processed_data/date=20240115_120000/
   ├── part-00000-xxx.snappy.parquet
   └── part-00001-xxx.snappy.parquet
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Glue Job Not Starting**
-   - Check Lambda logs for errors
-   - Verify Glue job name is correct
-   - Check IAM permissions for Lambda to trigger Glue
-
-2. **Glue Job Failing**
-   - Check Glue job logs in CloudWatch
-   - Verify S3 paths are correct
-   - Check Glue script syntax
-
-3. **AWS credentials not found**
-   - Verify credentials are set: `aws configure list`
-   - Check environment variables or Vault configuration
-
-4. **S3 access denied**
-   - Verify IAM permissions
-   - Check bucket policies
-   - Ensure bucket exists
-
-5. **Lambda timeout**
-   - Lambda only triggers Glue, timeout should be minimal (60 seconds)
-   - Processing happens in Glue, not Lambda
-
-## Testing
-
-The ETL pipeline is tested through AWS Glue job execution. Monitor job runs and logs to verify functionality.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Support
-
-For issues and questions:
-- Open an issue on GitHub
-- Check the troubleshooting section
-- Review AWS CloudWatch logs
-
-## Next Steps
-
-- Add data validation rules
-- Implement data quality checks
-- Add more transformation functions
-- Set up scheduled runs (EventBridge/CloudWatch Events)
-- Add data lineage tracking
-- Implement incremental processing
