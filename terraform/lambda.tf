@@ -5,7 +5,7 @@ resource "aws_lambda_function" "etl_pipeline" {
   handler       = "lambda_handler.lambda_handler"
   runtime       = "python3.9"
   timeout       = 60  # 1 minute - just triggers Glue job
-  memory_size   = 128  # Minimal memory needed
+  memory_size   = 128 # Minimal memory needed
 
   # Package the Lambda function (code only, no heavy deps)
   filename         = data.archive_file.lambda_zip.output_path
@@ -13,9 +13,9 @@ resource "aws_lambda_function" "etl_pipeline" {
 
   environment {
     variables = {
-      GLUE_JOB_NAME      = aws_glue_job.etl_job.name
-      DESTINATION_BUCKET = aws_s3_bucket.destination.id
-      OUTPUT_PREFIX      = "processed_data"
+      GLUE_JOB_NAME        = aws_glue_job.etl_job.name
+      DESTINATION_BUCKET   = aws_s3_bucket.destination.id
+      OUTPUT_PREFIX        = "processed_data"
       CLOUDWATCH_LOG_GROUP = var.enable_cloudwatch ? try(aws_cloudwatch_log_group.etl_pipeline[0].name, "/aws/lambda/${var.project_name}-etl-${var.environment}") : "/aws/lambda/${var.project_name}-etl-${var.environment}"
       CLOUDWATCH_ENABLED   = tostring(var.enable_cloudwatch)
     }
@@ -39,7 +39,7 @@ resource "null_resource" "package_lambda" {
 
   provisioner "local-exec" {
     interpreter = ["PowerShell", "-Command"]
-    command = <<-EOT
+    command     = <<-EOT
       $ErrorActionPreference = "Stop"
       # Change to project root directory
       $projectRoot = Resolve-Path (Join-Path "${path.module}" "..")
@@ -76,7 +76,7 @@ resource "null_resource" "package_lambda" {
 
 # Create deployment package
 data "archive_file" "lambda_zip" {
-  depends_on = [null_resource.package_lambda]
+  depends_on  = [null_resource.package_lambda]
   type        = "zip"
   source_dir  = "${path.module}/../lambda_package"
   output_path = "${path.module}/lambda_function.zip"

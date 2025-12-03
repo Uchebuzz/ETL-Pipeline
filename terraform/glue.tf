@@ -137,14 +137,14 @@ resource "aws_glue_job" "etl_job" {
   depends_on = [aws_s3_object.glue_etl_script]
 
   default_arguments = {
-    "--job-language"      = "python"
-    "--job-bookmark-option" = "job-bookmark-disable"
-    "--enable-metrics"    = "true"
+    "--job-language"                     = "python"
+    "--job-bookmark-option"              = "job-bookmark-disable"
+    "--enable-metrics"                   = "true"
     "--enable-continuous-cloudwatch-log" = "true"
   }
 
   max_retries       = 0
-  timeout           = 60  # minutes
+  timeout           = 60 # minutes
   glue_version      = "4.0"
   number_of_workers = 2
   worker_type       = "G.1X"
