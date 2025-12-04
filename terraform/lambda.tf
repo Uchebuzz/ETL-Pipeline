@@ -39,8 +39,13 @@ resource "null_resource" "package_lambda" {
 
   provisioner "local-exec" {
     working_dir = "${path.module}/.."
-    interpreter = ["powershell.exe", "-Command"]
-    command     = "if (Get-Command bash -ErrorAction SilentlyContinue) { bash scripts/package_lambda.sh } else { powershell.exe -ExecutionPolicy Bypass -File scripts/package_lambda.ps1 }"
+    command     = <<-EOT
+      if command -v bash >/dev/null 2>&1; then
+        bash scripts/package_lambda.sh
+      else
+        powershell.exe -ExecutionPolicy Bypass -File scripts/package_lambda.ps1
+      fi
+    EOT
   }
 }
 
