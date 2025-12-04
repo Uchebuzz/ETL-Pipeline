@@ -33,7 +33,7 @@ if (Test-Path $EnvFile) {
                 "AWS_REGION" { "TF_VAR_aws_region" }
                 "ENVIRONMENT" { "TF_VAR_environment" }
                 "PROJECT_NAME" { "TF_VAR_project_name" }
-                "ENABLE_CLOUDWATCH" { "TF_VAR_enable_cloudwatch" }
+                "CLOUDWATCH_ENABLED" { "TF_VAR_enable_cloudwatch" }
                 default { $key }
             }
             

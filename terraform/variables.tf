@@ -7,13 +7,11 @@ variable "aws_region" {
 variable "environment" {
   description = "Environment name (dev, staging, prod)"
   type        = string
-  default     = "dev"
 }
 
 variable "project_name" {
   description = "Project name for resource naming"
   type        = string
-  default     = "etl-pipeline"
 }
 
 variable "source_bucket_name" {
@@ -29,12 +27,10 @@ variable "destination_bucket_name" {
 variable "enable_cloudwatch" {
   description = "Enable CloudWatch logging"
   type        = bool
-  default     = true
 }
 
 variable "glue_scripts_bucket_name" {
   description = "Name of the S3 bucket for Glue scripts"
   type        = string
-  default     = ""
 }
 

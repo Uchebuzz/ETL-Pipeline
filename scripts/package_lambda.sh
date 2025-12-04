@@ -14,7 +14,12 @@ cp lambda_handler.py lambda_package/
 
 # Install only lightweight dependencies (boto3 for Glue client)
 echo "Installing lightweight dependencies..."
-pip install boto3 -t lambda_package/ --upgrade
+if command -v pip >/dev/null 2>&1; then
+    pip install boto3 -t lambda_package/ --upgrade
+else
+    echo "Warning: pip not found. Skipping dependency installation."
+    echo "boto3 should be available in Lambda runtime, but ensure it's included if needed."
+fi
 
 # Aggressively remove unnecessary files to reduce package size
 echo "Cleaning up unnecessary files..."

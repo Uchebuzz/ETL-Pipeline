@@ -1,4 +1,0 @@
-# This file is maintained automatically by "terraform init".
-# Copy this to .terraform.lock.hcl after running terraform init
-# Example lock file - run terraform init to generate the actual lock file
-

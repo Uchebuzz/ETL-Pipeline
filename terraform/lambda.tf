@@ -38,23 +38,9 @@ resource "null_resource" "package_lambda" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOT
-      set -e
-      PROJECT_ROOT="$(cd "${path.module}/.." && pwd)"
-      cd "$PROJECT_ROOT"
-      
-      if [ -f "scripts/package_lambda.sh" ]; then
-        bash scripts/package_lambda.sh
-      elif [ -f "scripts/package_lambda.ps1" ]; then
-        powershell -Command "& { $ErrorActionPreference = 'Stop'; & 'scripts/package_lambda.ps1' }" || \
-        pwsh -Command "& { $ErrorActionPreference = 'Stop'; & 'scripts/package_lambda.ps1' }"
-      else
-        # Fallback: Create package directory manually
-        mkdir -p lambda_package
-        cp lambda_handler.py lambda_package/ 2>/dev/null || true
-        echo "Lambda package directory created at $PROJECT_ROOT/lambda_package"
-      fi
-    EOT
+    working_dir = "${path.module}/.."
+    interpreter = ["powershell.exe", "-Command"]
+    command     = "if (Get-Command bash -ErrorAction SilentlyContinue) { bash scripts/package_lambda.sh } else { powershell.exe -ExecutionPolicy Bypass -File scripts/package_lambda.ps1 }"
   }
 }
 

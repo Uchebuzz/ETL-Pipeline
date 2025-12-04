@@ -1,6 +1,6 @@
 # S3 bucket for Glue scripts
 resource "aws_s3_bucket" "glue_scripts" {
-  bucket = var.glue_scripts_bucket_name != "" ? var.glue_scripts_bucket_name : "${var.project_name}-glue-scripts-${var.environment}"
+  bucket = var.glue_scripts_bucket_name
 
   lifecycle {
     create_before_destroy = true
