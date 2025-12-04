@@ -93,8 +93,8 @@ jobs:
           chmod +x terraform.sh
           ./terraform.sh init
         env:
-          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
-          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET }}
+          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET }}
           TF_VAR_glue_scripts_bucket_name: ${{ secrets.GLUE_SCRIPTS_BUCKET_NAME }}
           TF_VAR_project_name: ${{ secrets.PROJECT_NAME }}
           TF_VAR_environment: dev
@@ -106,8 +106,8 @@ jobs:
           cd terraform
           bash ../scripts/import_existing_resources.sh
         env:
-          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
-          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET }}
+          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET }}
           TF_VAR_glue_scripts_bucket_name: ${{ secrets.GLUE_SCRIPTS_BUCKET_NAME }}
           TF_VAR_project_name: ${{ secrets.PROJECT_NAME }}
           TF_VAR_environment: dev
@@ -120,8 +120,8 @@ jobs:
           cd terraform
           ./terraform.sh apply -auto-approve
         env:
-          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
-          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET }}
+          TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET }}
           TF_VAR_glue_scripts_bucket_name: ${{ secrets.GLUE_SCRIPTS_BUCKET_NAME }}
           TF_VAR_project_name: ${{ secrets.PROJECT_NAME }}
           TF_VAR_environment: dev
