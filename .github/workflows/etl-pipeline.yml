@@ -115,6 +115,11 @@ jobs:
           TF_VAR_enable_cloudwatch: ${{ secrets.CLOUDWATCH_ENABLED }}
         continue-on-error: true
       
+      - name: Package Lambda Function
+        run: |
+          chmod +x scripts/package_lambda.sh
+          bash scripts/package_lambda.sh
+      
       - name: Terraform Apply
         run: |
           cd terraform

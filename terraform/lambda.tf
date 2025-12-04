@@ -31,27 +31,8 @@ resource "aws_lambda_function" "etl_pipeline" {
   }
 }
 
-# Package Lambda function before deployment
-resource "null_resource" "package_lambda" {
-  triggers = {
-    lambda_handler = filemd5("${path.module}/../lambda_handler.py")
-  }
-
-  provisioner "local-exec" {
-    working_dir = "${path.module}/.."
-    command     = <<-EOT
-      if command -v bash >/dev/null 2>&1; then
-        bash scripts/package_lambda.sh
-      else
-        powershell.exe -ExecutionPolicy Bypass -File scripts/package_lambda.ps1
-      fi
-    EOT
-  }
-}
-
 # Create deployment package
 data "archive_file" "lambda_zip" {
-  depends_on  = [null_resource.package_lambda]
   type        = "zip"
   source_dir  = "${path.module}/../lambda_package"
   output_path = "${path.module}/lambda_function.zip"
