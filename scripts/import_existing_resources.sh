@@ -8,98 +8,97 @@ YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# === Load .env file ===
+# === Load .env file (optional) ===
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Find .env file (check current directory and parent)
+ENV_FILE=""
 if [ -f "$SCRIPT_DIR/../.env" ]; then
     ENV_FILE="$SCRIPT_DIR/../.env"
 elif [ -f "$SCRIPT_DIR/.env" ]; then
     ENV_FILE="$SCRIPT_DIR/.env"
 elif [ -f ".env" ]; then
     ENV_FILE=".env"
-else
-    echo -e "${RED}Error: .env file not found${NC}"
-    echo "Checked locations:"
-    echo "  - $SCRIPT_DIR/../.env"
-    echo "  - $SCRIPT_DIR/.env"
-    echo "  - ./.env"
-    exit 1
 fi
 
-echo -e "${CYAN}Loading environment variables from $ENV_FILE...${NC}"
-
-# Load and export variables
-while IFS= read -r line || [ -n "$line" ]; do
-    # Skip empty lines and comments
-    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+# Load from .env file if it exists, otherwise use environment variables already set
+if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+    echo -e "${CYAN}Loading environment variables from $ENV_FILE...${NC}"
     
-    # Skip lines without '=' separator
-    [[ "$line" != *"="* ]] && continue
+    # Load and export variables
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        
+        # Skip lines without '=' separator
+        [[ "$line" != *"="* ]] && continue
+        
+        # Split on '=' (only first occurrence)
+        key="${line%%=*}"
+        value="${line#*=}"
+        
+        # Remove leading/trailing whitespace
+        key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        
+        # Skip if key is empty after trimming
+        [[ -z "$key" ]] && continue
+        
+        # Remove quotes if present
+        value="${value%\"}"
+        value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
+        
+        # Map .env variables to Terraform variables and export them (only if not already set)
+        case "$key" in
+            SOURCE_BUCKET)
+                [ -z "${TF_VAR_source_bucket_name:-}" ] && export TF_VAR_source_bucket_name="$value"
+                echo -e "  ${NC}Loaded: SOURCE_BUCKET -> TF_VAR_source_bucket_name${NC}"
+                ;;
+            DESTINATION_BUCKET)
+                [ -z "${TF_VAR_destination_bucket_name:-}" ] && export TF_VAR_destination_bucket_name="$value"
+                echo -e "  ${NC}Loaded: DESTINATION_BUCKET -> TF_VAR_destination_bucket_name${NC}"
+                ;;
+            GLUE_SCRIPTS_BUCKET_NAME)
+                [ -z "${TF_VAR_glue_scripts_bucket_name:-}" ] && export TF_VAR_glue_scripts_bucket_name="$value"
+                echo -e "  ${NC}Loaded: GLUE_SCRIPTS_BUCKET_NAME -> TF_VAR_glue_scripts_bucket_name${NC}"
+                ;;
+            AWS_REGION)
+                [ -z "${TF_VAR_aws_region:-}" ] && export TF_VAR_aws_region="$value"
+                echo -e "  ${NC}Loaded: AWS_REGION -> TF_VAR_aws_region${NC}"
+                ;;
+            ENVIRONMENT)
+                [ -z "${TF_VAR_environment:-}" ] && export TF_VAR_environment="$value"
+                echo -e "  ${NC}Loaded: ENVIRONMENT -> TF_VAR_environment${NC}"
+                ;;
+            PROJECT_NAME)
+                [ -z "${TF_VAR_project_name:-}" ] && export TF_VAR_project_name="$value"
+                echo -e "  ${NC}Loaded: PROJECT_NAME -> TF_VAR_project_name${NC}"
+                ;;
+            CLOUDWATCH_ENABLED)
+                [ -z "${TF_VAR_enable_cloudwatch:-}" ] && export TF_VAR_enable_cloudwatch="$value"
+                echo -e "  ${NC}Loaded: CLOUDWATCH_ENABLED -> TF_VAR_enable_cloudwatch${NC}"
+                ;;
+            AWS_ACCESS_KEY_ID)
+                [ -z "${AWS_ACCESS_KEY_ID:-}" ] && export AWS_ACCESS_KEY_ID="$value"
+                echo -e "  ${NC}Loaded: AWS_ACCESS_KEY_ID${NC}"
+                ;;
+            AWS_SECRET_ACCESS_KEY)
+                [ -z "${AWS_SECRET_ACCESS_KEY:-}" ] && export AWS_SECRET_ACCESS_KEY="$value"
+                echo -e "  ${NC}Loaded: AWS_SECRET_ACCESS_KEY (hidden)${NC}"
+                ;;
+            AWS_SESSION_TOKEN)
+                [ -z "${AWS_SESSION_TOKEN:-}" ] && export AWS_SESSION_TOKEN="$value"
+                echo -e "  ${NC}Loaded: AWS_SESSION_TOKEN${NC}"
+                ;;
+        esac
+    done < "$ENV_FILE"
     
-    # Split on '=' (only first occurrence)
-    key="${line%%=*}"
-    value="${line#*=}"
-    
-    # Remove leading/trailing whitespace
-    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    
-    # Skip if key is empty after trimming
-    [[ -z "$key" ]] && continue
-    
-    # Remove quotes if present
-    value="${value%\"}"
-    value="${value#\"}"
-    value="${value%\'}"
-    value="${value#\'}"
-    
-    # Map .env variables to Terraform variables and export them
-    case "$key" in
-        SOURCE_BUCKET)
-            export TF_VAR_source_bucket_name="$value"
-            echo -e "  ${NC}Loaded: SOURCE_BUCKET -> TF_VAR_source_bucket_name${NC}"
-            ;;
-        DESTINATION_BUCKET)
-            export TF_VAR_destination_bucket_name="$value"
-            echo -e "  ${NC}Loaded: DESTINATION_BUCKET -> TF_VAR_destination_bucket_name${NC}"
-            ;;
-        GLUE_SCRIPTS_BUCKET_NAME)
-            export TF_VAR_glue_scripts_bucket_name="$value"
-            echo -e "  ${NC}Loaded: GLUE_SCRIPTS_BUCKET_NAME -> TF_VAR_glue_scripts_bucket_name${NC}"
-            ;;
-        AWS_REGION)
-            export TF_VAR_aws_region="$value"
-            echo -e "  ${NC}Loaded: AWS_REGION -> TF_VAR_aws_region${NC}"
-            ;;
-        ENVIRONMENT)
-            export TF_VAR_environment="$value"
-            echo -e "  ${NC}Loaded: ENVIRONMENT -> TF_VAR_environment${NC}"
-            ;;
-        PROJECT_NAME)
-            export TF_VAR_project_name="$value"
-            echo -e "  ${NC}Loaded: PROJECT_NAME -> TF_VAR_project_name${NC}"
-            ;;
-        CLOUDWATCH_ENABLED)
-            export TF_VAR_enable_cloudwatch="$value"
-            echo -e "  ${NC}Loaded: CLOUDWATCH_ENABLED -> TF_VAR_enable_cloudwatch${NC}"
-            ;;
-        AWS_ACCESS_KEY_ID)
-            export AWS_ACCESS_KEY_ID="$value"
-            echo -e "  ${NC}Loaded: AWS_ACCESS_KEY_ID${NC}"
-            ;;
-        AWS_SECRET_ACCESS_KEY)
-            export AWS_SECRET_ACCESS_KEY="$value"
-            echo -e "  ${NC}Loaded: AWS_SECRET_ACCESS_KEY (hidden)${NC}"
-            ;;
-        AWS_SESSION_TOKEN)
-            export AWS_SESSION_TOKEN="$value"
-            echo -e "  ${NC}Loaded: AWS_SESSION_TOKEN${NC}"
-            ;;
-    esac
-done < "$ENV_FILE"
-
-echo -e "${GREEN}Environment variables loaded successfully.${NC}"
+    echo -e "${GREEN}Environment variables loaded from .env file.${NC}"
+else
+    echo -e "${YELLOW}No .env file found. Using environment variables already set (e.g., from CI/CD).${NC}"
+fi
 # === End .env loading ===
 
 # Find terraform directory
