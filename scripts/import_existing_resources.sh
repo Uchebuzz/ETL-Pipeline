@@ -234,6 +234,21 @@ echo ""
 echo -e "${CYAN}=== Importing Lambda Function ===${NC}"
 import_resource "aws_lambda_function.etl_pipeline" "$LAMBDA_FUNCTION_NAME" "Lambda function"
 
+# Import Lambda permission
+echo ""
+echo -e "${CYAN}=== Importing Lambda Permission ===${NC}"
+LAMBDA_PERMISSION_ID="${LAMBDA_FUNCTION_NAME}/AllowExecutionFromS3Bucket"
+import_resource "aws_lambda_permission.s3_invoke_lambda" "$LAMBDA_PERMISSION_ID" "Lambda permission for S3"
+
+# Import S3 bucket notification
+echo ""
+echo -e "${CYAN}=== Importing S3 Bucket Notification ===${NC}"
+if [ -n "$SOURCE_BUCKET" ]; then
+    import_resource "aws_s3_bucket_notification.source_bucket_notification" "$SOURCE_BUCKET" "S3 bucket notification"
+else
+    echo -e "${YELLOW}Skipping S3 bucket notification (SOURCE_BUCKET not set)${NC}"
+fi
+
 # Import CloudWatch log group
 if [ "$ENABLE_CLOUDWATCH" = "true" ]; then
     echo ""

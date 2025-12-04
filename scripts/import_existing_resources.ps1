@@ -71,6 +71,14 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to import lambda_function" -ForegroundColor Red
 }
 
+# Import Lambda permission
+Write-Host "`nImporting Lambda permission..." -ForegroundColor Yellow
+$LambdaPermissionId = "${LambdaFunctionName}/AllowExecutionFromS3Bucket"
+& "terraform.exe" import aws_lambda_permission.s3_invoke_lambda $LambdaPermissionId
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Failed to import lambda_permission" -ForegroundColor Red
+}
+
 # Import S3 buckets
 Write-Host "`nImporting S3 buckets..." -ForegroundColor Yellow
 if ($SourceBucket) {
@@ -94,6 +102,17 @@ if ($DestBucket) {
 & "terraform.exe" import aws_s3_bucket.glue_scripts $GlueScriptsBucket
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to import glue_scripts bucket" -ForegroundColor Red
+}
+
+# Import S3 bucket notification
+Write-Host "`nImporting S3 bucket notification..." -ForegroundColor Yellow
+if ($SourceBucket) {
+    & "terraform.exe" import aws_s3_bucket_notification.source_bucket_notification $SourceBucket
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Failed to import S3 bucket notification" -ForegroundColor Red
+    }
+} else {
+    Write-Host "Skipping S3 bucket notification (TF_VAR_source_bucket_name not set)" -ForegroundColor Gray
 }
 
 # Import CloudWatch log group
