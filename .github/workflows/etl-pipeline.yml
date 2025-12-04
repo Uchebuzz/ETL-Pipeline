@@ -95,7 +95,11 @@ jobs:
         env:
           TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
           TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_glue_scripts_bucket_name: ${{ secrets.GLUE_SCRIPTS_BUCKET_NAME }}
+          TF_VAR_project_name: ${{ secrets.PROJECT_NAME }}
           TF_VAR_environment: dev
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_enable_cloudwatch: ${{ secrets.CLOUDWATCH_ENABLED }}
       
       - name: Import Existing Resources
         run: |
@@ -104,8 +108,11 @@ jobs:
         env:
           TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
           TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_glue_scripts_bucket_name: ${{ secrets.GLUE_SCRIPTS_BUCKET_NAME }}
+          TF_VAR_project_name: ${{ secrets.PROJECT_NAME }}
           TF_VAR_environment: dev
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_enable_cloudwatch: ${{ secrets.CLOUDWATCH_ENABLED }}
         continue-on-error: true
       
       - name: Terraform Apply
@@ -115,4 +122,8 @@ jobs:
         env:
           TF_VAR_source_bucket_name: ${{ secrets.SOURCE_BUCKET_NAME }}
           TF_VAR_destination_bucket_name: ${{ secrets.DESTINATION_BUCKET_NAME }}
+          TF_VAR_glue_scripts_bucket_name: ${{ secrets.GLUE_SCRIPTS_BUCKET_NAME }}
+          TF_VAR_project_name: ${{ secrets.PROJECT_NAME }}
           TF_VAR_environment: dev
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_enable_cloudwatch: ${{ secrets.CLOUDWATCH_ENABLED }}
